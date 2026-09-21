@@ -19,7 +19,7 @@ module MyriBuiltin
         filler_width: 1.0,
         desk_width: 45.0,
         bed_width: 58.0,
-        tower_width: 23.0,
+        tower_width: 24.0,
         upper_depth: 12.0,
         work_depth: 24.0,
         panel_thickness: 0.75,
@@ -68,7 +68,6 @@ module MyriBuiltin
         # part('Wall', 0, 0, 0, s[:wall_width], 1, s[:wall_height], :wall),
         # part('Floor', -8, -100, -1, 144, 105, 1, :floor),
         part('Left filler', 0, -12, 0, 1, 12, s[:cabinet_height], :walnut_solid),
-        part('Right filler', 127, -12, 0, 1, 12, s[:cabinet_height], :walnut_solid),
       ]
     end
 
@@ -77,7 +76,7 @@ module MyriBuiltin
       [
         part('Desk and shelving back panel', 1, -0.25, 0, 45, 0.25, s[:cabinet_height], :walnut_plywood),
         part('Bed and bridge back panel', 46, -0.25, 0, 58, 0.25, 72, :walnut_plywood),
-        part('Nightstand tower back panel', 104, -0.25, 0, 23, 0.25, s[:cabinet_height], :walnut_plywood),
+        part('Nightstand tower back panel', 104, -0.25, 0, s[:tower_width], 0.25, s[:cabinet_height], :walnut_plywood),
         part('Desk bed divider panel', 45.24, -12, 0, 0.75, 12, 60, :walnut_plywood)
       ]
     end
@@ -147,26 +146,57 @@ module MyriBuiltin
 
     def nightstand_parts
       s = layout
+      thickness = s[:panel_thickness]
+      left = 104.0
+      width = s[:tower_width]
+      inner_x = left + thickness
+      inner_width = width - 2 * thickness
+      depth = s[:upper_depth] - s[:back_thickness]
       parts = [
-        part('Nightstand drawer cabinet', 104, -12, 0, 23, 12, 28, :walnut_plywood),
-        part('Nightstand cubby left side', 104, -12, 28, 0.75, 12, 20, :walnut_plywood),
-        part('Nightstand cubby right side', 126.25, -12, 28, 0.75, 12, 20, :walnut_plywood),
-        part('Nightstand cubby bottom', 104, -12, 28, 23, 12, 0.75, :walnut_plywood),
-        part('Nightstand cubby top', 104, -12, 47.25, 23, 12, 0.75, :walnut_plywood),
-        part('Tower upper left side', 104, -12, 48, 0.75, 12, s[:cabinet_height] - 48, :walnut_plywood),
-        part('Tower upper right side', 126.25, -12, 48, 0.75, 12, s[:cabinet_height] - 48, :walnut_plywood),
-        part('Nightstand LED', 105.5, -11.9, 47.65, 20, 0.4, 0.25, :led)
+        part('Nightstand carcass left side', left, -12, 0,
+             thickness, depth, s[:cabinet_height], :walnut_plywood),
+        part('Nightstand carcass right side', left + width - thickness, -12, 0,
+             thickness, depth, s[:cabinet_height], :walnut_plywood),
+        part('Nightstand carcass bottom', inner_x, -12, 0,
+             inner_width, depth, thickness, :walnut_plywood),
+        part('Nightstand cubby bottom', inner_x, -12, 28,
+             inner_width, depth, thickness, :walnut_plywood),
+        part('Nightstand cubby top', inner_x, -12, 47.25,
+             inner_width, depth, thickness, :walnut_plywood),
+        part('Nightstand LED', 105.5, -11.9, 47, width - 3, 0.4, 0.25, :led)
       ]
 
+      # Inset fronts with 1/8-inch reveals; boxes allow 1/2 inch per side
+      # for slides. Hardware is not modeled.
+      reveal = 0.125
+      front_height = (28 - thickness - 4 * reveal) / 3.0
+      box_x = inner_x + 0.5
+      box_width = inner_width - 1.0
+      box_depth = 10.5
+      box_wall = 0.5
+      box_bottom = 0.25
       3.times do |index|
-        z = 0.18 + (index * 9.27333)
-        parts << part("Nightstand drawer front #{index + 1}", 104.12, -12.55, z,
-                      22.76, 0.55, 9.09333, :walnut_solid)
+        z = thickness + reveal + index * (front_height + reveal)
+        parts << part("Nightstand drawer front #{index + 1}", inner_x + reveal, -12, z,
+                      inner_width - 2 * reveal, 0.55, front_height, :walnut_solid)
+        box_z = z + 0.5
+        box_height = front_height - 1.0
+        box_y = -11.45
+        parts << part("Nightstand drawer #{index + 1} bottom", box_x, box_y, box_z,
+                      box_width, box_depth, box_bottom, :walnut_plywood)
+        [box_x, box_x + box_width - box_wall].each_with_index do |x, side|
+          parts << part("Nightstand drawer #{index + 1} side #{side + 1}", x, box_y, box_z + box_bottom,
+                        box_wall, box_depth, box_height - box_bottom, :walnut_plywood)
+        end
+        [box_y, box_y + box_depth - box_wall].each_with_index do |y, end_index|
+          parts << part("Nightstand drawer #{index + 1} end #{end_index + 1}", box_x + box_wall, y, box_z + box_bottom,
+                        box_width - 2 * box_wall, box_wall, box_height - box_bottom, :walnut_plywood)
+        end
       end
 
-      [60, 72, 84, s[:cabinet_height] - s[:panel_thickness]].each_with_index do |z, index|
-        parts << part("Tower shelf #{index + 1}", 104, -12, z,
-                      23, 12, 0.75, :walnut_plywood)
+      [60, 72, 84, s[:cabinet_height] - thickness].each_with_index do |z, index|
+        parts << part("Tower shelf #{index + 1}", inner_x, -12, z,
+                      inner_width, depth, thickness, :walnut_plywood)
       end
       parts
     end
