@@ -32,10 +32,11 @@ MyriBuiltinLiveReload.stop
 ## Editing the design
 
 - Major dimensions are collected in the `layout` method near the top.
-- Parts are organized into room, back/divider, desk, bed and nightstand methods.
+- `assemblies` defines the shop modules; each gets its own named Outliner group.
+- See [ASSEMBLIES.md](ASSEMBLIES.md) for module sizes and installation order.
 - All dimensions and origins are expressed in inches.
 - The front elevation is desk-left, bed-center and nightstand-right.
-- Upper cabinets and side fillers reach the 96-inch ceiling, with no top fascia.
+- Upper boxes stop at 95.5 inches; site-fitted trim closes the ceiling gap.
 - The nightstand is 12 inches deep, flush with the shelving above.
 
 If a saved edit contains a Ruby error, the previous successful geometry remains
@@ -46,7 +47,7 @@ again to rebuild.
 
 The model uses `Myri Walnut Solid` and `Myri Walnut Plywood`, loaded from
 `walnut_solid.png` and `walnut_plywood.png` beside the Ruby script.
-Solid walnut is assigned to fillers, desk top, drawer fronts, bed rails
+Solid walnut is assigned to the desk top, drawer fronts, bed rails
 and footboard. Other wood parts use walnut plywood. These are visualization
 assignments, not a construction specification.
 
