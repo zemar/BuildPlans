@@ -67,3 +67,15 @@ this setup does not simulate end grain or exposed plywood layers.
 Use SketchUp's Shaded with Textures face style to see the images. Save the Ruby
 file to rebuild after changing material settings. If you replace only a PNG,
 run `MyriBuiltinLiveReload.reload_script` in the Ruby Console to refresh it.
+
+## Checking script changes
+
+Run `ruby test/model_test.rb` without launching SketchUp. The checks cover the
+current design's geometry/material snapshot, repeated regeneration, invalid
+parts, tapered legs and solid overlaps. Intentional design changes require
+updating the snapshot expectation after reviewing the new dimensions.
+
+`build` creates the assembly plan once and validates it before replacing the
+previous model. Drawer construction is shared by the desk and nightstand.
+Rendering remains inside SketchUp; these checks do not replace a visual check
+of textures and the generated model there.
