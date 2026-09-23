@@ -170,7 +170,7 @@ module MyriBuiltin
         parts << part("#{name} side #{index + 1} purpleheart frame", side_x, -13.75, 0,
                       t, 0.75, 72, :purpleheart_solid)
       end
-      [{ name: name, shop_built: true, parts: parts }]
+      [fit_carcass_back({ name: name, shop_built: true, parts: parts })]
     end
 
     # Each entry is an independently transportable assembly. Coordinates remain
@@ -204,40 +204,67 @@ module MyriBuiltin
         part("#{edge[:name]} purpleheart frame", px, py - frame_depth, pz,
              w, frame_depth, h, :purpleheart_solid, grain: h > w ? :z : :x)
       end
-      { name: name, shop_built: true, parts: edges + frames + [
+      fit_carcass_back({ name: name, shop_built: true, parts: edges + frames + [
         part("#{name} back", inner_x, back_front, z + (bottom ? t : 0),
              inner_width, back, height - t - (bottom ? t : 0), :walnut_plywood),
         part("#{name} top mounting brace", inner_x, -brace_depth, z + height - t - brace_height,
              inner_width, brace_depth, brace_height, :walnut_plywood)
-      ] }
+      ] })
+    end
+
+    # Backs retain their Y position and extend into the surrounding panels.
+    def fit_carcass_back(assembly)
+      name = assembly[:name]
+      items = assembly[:parts]
+      back = items.find { |item| item[:name] == "#{name} back" }
+      depth = 0.25
+      panels = [
+        [items.find { |p| ["#{name} left side", "#{name} side 1"].include?(p[:name]) }, :x, :high],
+        [items.find { |p| ["#{name} right side", "#{name} side 2"].include?(p[:name]) }, :x, :low],
+        [items.find { |p| ["#{name} top", "#{name} top cap"].include?(p[:name]) }, :z, :low],
+        [items.find { |p| p[:name] == "#{name} bottom" }, :z, :high]
+      ]
+      panels.each do |panel, axis, edge|
+        next unless panel
+
+        panel[:dado] = { axis: axis, slot_axis: :y, edge: edge, depth: depth,
+                         bottom: back[:origin][1] - panel[:origin][1], height: back[:size][1] }
+        index = axis == :x ? 0 : 2
+        back[:origin][index] -= depth if edge == :high
+        back[:size][index] += depth
+      end
+      assembly
     end
 
     # Drawer fronts share the opening's inset reveals; boxes allow 1/2 inch
     # on each side for slides. All dimensions are finished inches.
-    def drawer_parts(name, x, y, z, opening_width, front_height, front_name: "#{name} front")
+    def drawer_parts(name, x, y, z, opening_width, front_height, front_name: "#{name} front", box_depth: 12.0)
       reveal = 0.125
       front_thickness = layout[:walnut_front_thickness]
       box_x = x + 0.5
       box_y = y + front_thickness
       box_z = z + 0.5
       box_width = opening_width - 1.0
-      box_depth = 12.0
       box_height = front_height - 1.0
       wall = 0.5
       bottom = 0.5
+      bottom_inset = 0.25
+      groove = { depth: wall - bottom_inset, bottom: 0.5, height: bottom }
       items = [
         part(front_name, x + reveal, y, z,
              opening_width - 2 * reveal, front_thickness, front_height, :walnut_solid),
-        part("#{name} bottom", box_x, box_y, box_z,
-             box_width, box_depth, bottom, :baltic_birch_plywood).merge(drawer_box_role: :bottom)
+        part("#{name} bottom", box_x + bottom_inset, box_y + bottom_inset, box_z + groove[:bottom],
+             box_width - 2 * bottom_inset, box_depth - 2 * bottom_inset, bottom, :baltic_birch_plywood).merge(drawer_box_role: :bottom)
       ]
       [box_x, box_x + box_width - wall].each_with_index do |side_x, index|
-        items << part("#{name} side #{index + 1}", side_x, box_y, box_z + bottom,
-                      wall, box_depth, box_height - bottom, :baltic_birch_plywood).merge(drawer_box_role: :side)
+        items << part("#{name} side #{index + 1}", side_x, box_y, box_z,
+                      wall, box_depth, box_height, :baltic_birch_plywood).merge(
+                        drawer_box_role: :side, dado: groove.merge(axis: :x, edge: index.zero? ? :high : :low))
       end
       [box_y, box_y + box_depth - wall].each_with_index do |end_y, index|
-        items << part("#{name} end #{index + 1}", box_x + wall, end_y, box_z + bottom,
-                      box_width - 2 * wall, wall, box_height - bottom, :baltic_birch_plywood).merge(drawer_box_role: :end)
+        items << part("#{name} end #{index + 1}", box_x + wall, end_y, box_z,
+                      box_width - 2 * wall, wall, box_height, :baltic_birch_plywood).merge(
+                        drawer_box_role: :end, dado: groove.merge(axis: :y, edge: index.zero? ? :high : :low))
       end
       items
     end
@@ -268,7 +295,7 @@ module MyriBuiltin
         drawer_name = index.zero? ? 'Desk file drawer' : "Desk drawer #{index + 1}"
         front_z = t + reveal + slot * (drawer_height + reveal)
         pedestal[:parts].concat(drawer_parts(drawer_name, 1 + t, -22.75, front_z,
-                                            15 - 2 * t, front_height))
+                                            15 - 2 * t, front_height, box_depth: 21.0))
       end
       # The pedestal fits in front of the surround's separate back panel.
       pedestal[:parts].each { |item| item[:origin][1] -= s[:back_recess] + s[:back_thickness] }
@@ -342,7 +369,7 @@ module MyriBuiltin
 
     # Geometry is local to the definition; placement and labels belong to instances.
     def component_signature(item)
-      item.values_at(:size, :material, :grain, :taper_inset)
+      item.values_at(:size, :material, :grain, :taper_inset, :dado)
     end
 
     def share_drawer_box_components(modules)
@@ -758,7 +785,9 @@ module MyriBuiltin
       definition = model.definitions[name] || model.definitions.add(name)
       definition.entities.clear!
       width, depth, height = part_data[:size]
-      if part_data[:taper_inset]
+      if part_data[:dado]
+        add_dado_panel(definition.entities, part_data[:size], part_data[:dado])
+      elsif part_data[:taper_inset]
         add_tapered_leg(definition.entities, width, depth, height, part_data[:taper_inset])
       else
         add_box(definition.entities, width, depth, height)
@@ -782,6 +811,33 @@ module MyriBuiltin
         face.material = material
         position_wood_texture(face, material, part_data, texture_settings, axes) if material.texture
       end
+    end
+
+    # Extrude a notched profile so the groove is real geometry on the inside face.
+    def add_dado_panel(entities, size, dado)
+      axes = [:x, :y, :z]
+      thickness_axis = axes.index(dado[:axis])
+      slot_axis = axes.index(dado.fetch(:slot_axis, :z))
+      length_axis = ([0, 1, 2] - [thickness_axis, slot_axis]).first
+      thickness = size[thickness_axis]
+      span = size[slot_axis]
+      length = size[length_axis]
+      low = dado[:bottom]
+      high = low + dado[:height]
+      profile = [[0, 0], [thickness, 0], [thickness, low],
+                 [thickness - dado[:depth], low], [thickness - dado[:depth], high],
+                 [thickness, high], [thickness, span], [0, span]]
+      points = profile.map do |across, along|
+        across = thickness - across if dado[:edge] == :low
+        point = [0, 0, 0]
+        point[thickness_axis] = across
+        point[slot_axis] = along
+        point.map(&:inch)
+      end
+      face = entities.add_face(points)
+      normal = face.normal.public_send(axes[length_axis])
+      face.reverse! if normal.negative?
+      face.pushpull(length.inch)
     end
 
     def add_box(entities, width, depth, height)
