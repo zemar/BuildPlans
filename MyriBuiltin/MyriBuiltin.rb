@@ -81,6 +81,7 @@ module MyriBuiltin
       rail_thickness = s[:bed_rail_thickness]
       clear_length = 74.5
       slat_gap = (clear_length - s[:bed_slat_count] * s[:bed_slat_width]) / (s[:bed_slat_count] - 1)
+      middle_ledge_x = 48 + 54 / 2.0 - 1.5 / 2.0
       parts = [
         part('Bed left rail', 48 - rail_thickness, -78.5, 8, rail_thickness, 76, 8, :walnut_solid),
         part('Bed right rail', 102, -78.5, 8, rail_thickness, 76, 8, :walnut_solid),
@@ -90,6 +91,7 @@ module MyriBuiltin
         part('Bed head rail', 48, -4, 8, 54, rail_thickness, 8, :walnut_solid),
         part('Bed left slat ledge', 48, -78.5, ledge_top - 1, 1, clear_length, 1, :walnut_solid),
         part('Bed right slat ledge', 101, -78.5, ledge_top - 1, 1, clear_length, 1, :walnut_solid),
+        part('Bed center slat ledge', middle_ledge_x, -78.5, ledge_top - 1, 3.0, clear_length, 1.5, :walnut_solid),
         part('Full mattress', 48, -78, slat_top, 54, 75, 10, :linen),
         part('Bed bridge LED', 47.5, -14.15, 71.65, 55, 0.4, 0.25, :led)
       ]
