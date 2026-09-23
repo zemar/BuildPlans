@@ -343,6 +343,16 @@ module MyriBuiltin
       ]
       modules.concat(headboard_carcasses)
       modules << { name: 'I1 Site-installed top, trim and lighting', shop_built: false, parts: loose }
+      desktop = loose.find { |item| item[:name] == 'Desk top' }
+      support_x = desktop[:origin][0] + desktop[:size][0] - t
+      support_y = desktop[:origin][1] + s[:face_frame_thickness]
+      support_height = desktop[:origin][2]
+      modules << { name: 'D5 Desk right support panel', shop_built: true, parts: [
+        part('Desk right walnut plywood support', support_x, support_y, 0,
+             t, desktop[:size][1] - s[:face_frame_thickness], support_height, :walnut_plywood, grain: :z),
+        part('Desk right support purpleheart face frame', support_x, support_y - s[:face_frame_thickness], 0,
+             t, s[:face_frame_thickness], support_height, :purpleheart_solid, grain: :z)
+      ] }
       bed_groups = bed_parts.group_by do |item|
         case item[:name]
         when /Bed left rail|Bed left slat ledge/ then 'F1 Bed left rail and ledge'
