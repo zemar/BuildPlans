@@ -70,12 +70,12 @@ mattress, desk top, lighting, backing infills and ceiling trim install in the ro
    face frames are not structural mounting points.
 6. Fasten the bed head rail against the walnut cross brace inside H1, then
    install the remaining bed parts; fit doors/drawers, lighting
-   and the separate ceiling scribe strips.
+   and user-supplied ceiling trim (not modeled).
 
 Boxes stop at 95.5 inches, leaving a nominal 1/2-inch ceiling installation gap.
 This avoids trying to tip a full-height 96-inch box under a 96-inch ceiling.
-The gap is closed with narrow site-fitted purpleheart strips, not a structural
-fascia. The wall-wide nominal 128-inch fit still requires field verification;
+The gap will be covered with user-supplied trim after installation; no scribe
+pieces are modeled. The wall-wide nominal 128-inch fit still requires field verification;
 there is no allowance for an out-of-plumb right wall in the current geometry.
 
 This is an assembly-layout model. Panel joints, fasteners, mounting cleats,
@@ -151,14 +151,14 @@ texture rather than plywood. Drawer boxes begin behind the thicker fronts and
 retain their 12-inch depth. Nightstand boxes currently meet the back-panel
 plane with no extra rear clearance; confirm slide tolerances before cutting.
 
-The horizontal face frame above the desktop is one continuous 43.875-inch-long,
+The horizontal face frame above the desktop is one continuous 44.125-inch-long,
 1.5-inch-tall purpleheart rail at elevation 48 inches. The upper center stile
 starts at 49.5 inches and butts into this rail; the small center filler and
 two separate horizontal rail sections have been removed.
 
 The far-left and far-right purpleheart stiles are each one 95.5-inch-long
 vertical piece, installed on site with the shared face frames. Their widths
-remain 1 inch on the left and 3/4 inch on the right; thickness is 3/4 inch.
+remain 3/4 inch on both sides; thickness is 3/4 inch.
 
 The horizontal frame above the bed is one continuous 57.25-inch-long,
 1.5-inch-tall purpleheart rail at elevation 71.25 inches. The two bridge
@@ -167,8 +167,15 @@ with the other shared rails.
 
 The top face-frame rail above all three bridge cabinets is also continuous:
 57.25 inches long by 3/4 inch tall and thick, at elevation 94.75 inches.
-Intermediate stiles terminate beneath it. The ceiling scribe remains separate.
+Intermediate stiles terminate beneath it. Ceiling trim is not modeled.
 
-The desk's top face-frame rail is one continuous 43.875-inch-long purpleheart
+The desk's top face-frame rail is one continuous 44.125-inch-long purpleheart
 piece, 3/4 inch tall and thick, at elevation 94.75 inches. The center stile
-ends beneath it; the ceiling scribe remains separate.
+ends beneath it; ceiling trim is not modeled.
+
+Drawer sides, ends and bottoms use 1/2-inch Baltic birch plywood, shown with
+a light birch color. Drawer fronts remain 3/4-inch solid walnut.
+
+D1 and D3 use 3/4-inch plywood for both sides. Their outside widths remain
+unchanged; interior panels, the desktop and front rails extend 1/4 inch farther
+left to meet the thinner side.

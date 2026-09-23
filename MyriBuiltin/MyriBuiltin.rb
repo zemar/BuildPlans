@@ -32,8 +32,10 @@ module MyriBuiltin
         person_kneeling_ratio: 5.0 / 7.0,
         bed_slat_count: 14,
         bed_slat_width: 3.5,
-        bed_slat_thickness: 1.0,
+        bed_slat_thickness: 0.5,
         bed_ledge_drop: 1.0,
+        led_back_clearance: 0.75,
+        show_led_illumination: true,
         bed_rail_thickness: 1.5,
         walnut_front_thickness: 0.75
       }
@@ -43,12 +45,37 @@ module MyriBuiltin
       {
         walnut_solid: [107, 70, 45],
         walnut_plywood: [107, 70, 45],
-        ash: [210, 190, 151],
+        baltic_birch_plywood: [224, 207, 169],
+        maple_solid: [181, 151, 114],
         purpleheart_solid: [105, 50, 90],
         linen: [227, 214, 189],
         wall: [214, 207, 191],
         floor: [168, 125, 79],
         led: [255, 158, 46]
+      }
+    end
+
+    # OpenCutList types: Solid Wood = 1, Sheet Goods = 2, Hardware = 5.
+    def material_types
+      {
+        maple_solid: 1,
+        walnut_solid: 1,
+        purpleheart_solid: 1,
+        walnut_plywood: 2,
+        baltic_birch_plywood: 2,
+        led: 5,
+        linen: 5
+      }
+    end
+
+    # OpenCutList stock thicknesses, with explicit units independent of model units.
+    def material_stock_thicknesses
+      {
+        walnut_solid: ['0.75"', '1.5"'],
+        walnut_plywood: ['0.25"', '0.75"'],
+        baltic_birch_plywood: ['0.5"'],
+        maple_solid: ['0.5"'],
+        purpleheart_solid: ['0.75"']
       }
     end
 
@@ -89,20 +116,30 @@ module MyriBuiltin
         part('Bed front left leg', 48 - rail_thickness, -80, 0, 3, rail_thickness, 8, :walnut_solid, grain: :z).merge(taper_inset: [0.5, 0.25]),
         part('Bed front right leg', 99 + rail_thickness, -80, 0, 3, rail_thickness, 8, :walnut_solid, grain: :z).merge(taper_inset: [0.5, 0.25]),
         part('Bed head rail', 48, -4, 8, 54, rail_thickness, 8, :walnut_solid),
-        part('Bed left slat ledge', 48, -78.5, ledge_top - 1, 1, clear_length, 1, :walnut_solid),
-        part('Bed right slat ledge', 101, -78.5, ledge_top - 1, 1, clear_length, 1, :walnut_solid),
+        part('Bed left slat ledge', 48, -78.5, ledge_top - 0.75, 1, clear_length, 0.75, :walnut_solid),
+        part('Bed right slat ledge', 101, -78.5, ledge_top - 0.75, 1, clear_length, 0.75, :walnut_solid),
         part('Bed center slat ledge', middle_ledge_x, -78.5, ledge_top - 1, 3.0, clear_length, 1.5, :walnut_solid),
         part('Full mattress', 48, -78, slat_top, 54, 75, 10, :linen),
-        part('Bed bridge LED', 47.5, -14.15, 71.65, 55, 0.4, 0.25, :led)
+        led_strip('Bed bridge LED', 47.5, 71.25, 55)
       ]
 
       s[:bed_slat_count].times do |index|
         y = -78.5 + index * (s[:bed_slat_width] + slat_gap)
-        parts << part("Ash bed slat #{index + 1}", 48, y, ledge_top,
-                      54, s[:bed_slat_width], s[:bed_slat_thickness], :ash, grain: :x)
+        parts << part('Maple solid bed slat', 48, y, ledge_top,
+                      54, s[:bed_slat_width], s[:bed_slat_thickness], :maple_solid, grain: :x)
+                      .merge(definition_name: 'Maple solid bed slat')
       end
 
       parts
+    end
+
+    def led_strip(name, x, panel_underside, width)
+      s = layout
+      depth = 0.4
+      height = 0.25
+      back_front = -s[:back_recess] - s[:back_thickness]
+      y = back_front - s[:led_back_clearance] - depth
+      part(name, x, y, panel_underside - height, width, depth, height, :led)
     end
 
     def headboard_carcasses
@@ -187,20 +224,20 @@ module MyriBuiltin
       box_depth = 12.0
       box_height = front_height - 1.0
       wall = 0.5
-      bottom = 0.25
+      bottom = 0.5
       items = [
         part(front_name, x + reveal, y, z,
              opening_width - 2 * reveal, front_thickness, front_height, :walnut_solid),
         part("#{name} bottom", box_x, box_y, box_z,
-             box_width, box_depth, bottom, :walnut_plywood)
+             box_width, box_depth, bottom, :baltic_birch_plywood).merge(drawer_box_role: :bottom)
       ]
       [box_x, box_x + box_width - wall].each_with_index do |side_x, index|
         items << part("#{name} side #{index + 1}", side_x, box_y, box_z + bottom,
-                      wall, box_depth, box_height - bottom, :walnut_plywood)
+                      wall, box_depth, box_height - bottom, :baltic_birch_plywood).merge(drawer_box_role: :side)
       end
       [box_y, box_y + box_depth - wall].each_with_index do |end_y, index|
         items << part("#{name} end #{index + 1}", box_x + wall, end_y, box_z + bottom,
-                      box_width - 2 * wall, wall, box_height - bottom, :walnut_plywood)
+                      box_width - 2 * wall, wall, box_height - bottom, :baltic_birch_plywood).merge(drawer_box_role: :end)
       end
       items
     end
@@ -244,16 +281,16 @@ module MyriBuiltin
       tower_x = s[:wall_width] - s[:tower_width]
       t = s[:panel_thickness]
       reveal = 0.125
-      # Half-inch installation clearance above boxes; loose scribe closes it.
+      # Half-inch installation clearance above boxes; user-supplied trim closes it.
       top = s[:cabinet_height] - 0.5
       modules = []
       desk = carcass('D1 Desk lower surround', 0, 0, desk_width, 48.75,
-                     left_thickness: s[:filler_width], bottom: false)
+                     bottom: false)
       modules << desk
       modules << desk_pedestal
       # Two separate boxes replace the shared central upright.
       modules << carcass('D3 Desk upper left', 0, 48.75, 23.5, top - 48.75,
-                         left_thickness: s[:filler_width], shelves: [60, 72, 84])
+                         shelves: [60, 72, 84])
       modules << carcass('D4 Desk upper right', 23.5, 48.75, desk_width - 23.5, top - 48.75,
                          shelves: [60, 72, 84])
       nightstand = carcass('N1 Nightstand drawers', tower_x, 0, s[:tower_width], 28.75)
@@ -273,14 +310,10 @@ module MyriBuiltin
         modules << cabinet
       end
       loose = [
-        part('Desk top - install in room', 1, -24, 29.25, desk_width - 1 - t, 24 - s[:back_recess] - s[:back_thickness], 1.5, :walnut_solid),
-        part('Desk LED', 2.5, -12.9, 47.65, 42, 0.4, 0.25, :led),
-        part('Nightstand LED', tower_x + 1.5, -12.9, 47, s[:tower_width] - 3, 0.4, 0.25, :led)
+        part('Desk top', t, -24, 29.25, desk_width - 2 * t, 24 - s[:back_recess] - s[:back_thickness], 1.5, :walnut_solid),
+        led_strip('Desk LED', 2.5, 48.0, 42),
+        led_strip('Nightstand LED', tower_x + 1.5, 47.25, s[:tower_width] - 3)
       ]
-      # [[0, desk_width], [desk_width, s[:bed_width]], [tower_x, s[:tower_width]]].each_with_index do |(x, width), index|
-      #   loose << part("Ceiling scribe #{index + 1} - fit on site", x, -13.75, top,
-      #                 width, 0.75, 0.5, :purpleheart_solid)
-      # end
       modules.concat(headboard_carcasses)
       modules << { name: 'I1 Site-installed top, trim and lighting', shop_built: false, parts: loose }
       bed_groups = bed_parts.group_by do |item|
@@ -296,13 +329,50 @@ module MyriBuiltin
       end
       consolidate_face_frames(modules)
       continuous_desk_face_frame(modules)
-      continuous_horizontal_face_frame(modules, 'Desk top', s[:filler_width], desk_width - t,
+      continuous_horizontal_face_frame(modules, 'Desk top', t, desk_width - t,
                                        top - t, height: t, stile_edge: :top)
       bed_left = s[:filler_width] + s[:desk_width] + t
       continuous_horizontal_face_frame(modules, 'Bed', bed_left, bed_left + s[:bed_width] - 2 * t, 71.25)
       continuous_horizontal_face_frame(modules, 'Bed top', bed_left, bed_left + s[:bed_width] - 2 * t,
                                        top - t, height: t, stile_edge: :top)
       continuous_outer_face_frames(modules)
+      name_purpleheart_parts(modules)
+      share_drawer_box_components(modules)
+    end
+
+    # Geometry is local to the definition; placement and labels belong to instances.
+    def component_signature(item)
+      item.values_at(:size, :material, :grain, :taper_inset)
+    end
+
+    def share_drawer_box_components(modules)
+      definitions = {}
+      counts = Hash.new(0)
+      modules.flat_map { |assembly| assembly[:parts] }.each do |item|
+        role = item[:drawer_box_role]
+        next unless role
+
+        # Match local dimensions and grain, since instances use translation only.
+        key = component_signature(item)
+        item[:definition_name] = definitions[key] ||= begin
+          counts[role] += 1
+          "Drawer box #{role} #{counts[role]}"
+        end
+      end
+      modules
+    end
+
+    # Consolidation uses coordinate labels internally; give finished parts clean,
+    # unique names so separate frame pieces retain separate definitions.
+    def name_purpleheart_parts(modules)
+      frames = modules.flat_map { |assembly| assembly[:parts] }
+                      .select { |item| item[:material] == :purpleheart_solid }
+      frames.group_by { |item| item[:name].sub(/ [xz]-?\d.*\z/, '') }.each do |name, items|
+        items.each_with_index do |item, index|
+          item[:name] = items.length == 1 ? name : "#{name} #{index + 1}"
+        end
+      end
+      modules
     end
 
     def continuous_outer_face_frames(modules)
@@ -319,15 +389,15 @@ module MyriBuiltin
       height = s[:cabinet_height] - 0.5
       shared = modules.find { |assembly| assembly[:name].start_with?('I3 ') }
       shared[:parts] << part('Far left continuous purpleheart stile', 0, front, 0,
-                             s[:filler_width], s[:face_frame_thickness], height, :purpleheart_solid, grain: :z)
+                             s[:panel_thickness], s[:face_frame_thickness], height, :purpleheart_solid, grain: :z)
       shared[:parts] << part('Far right continuous purpleheart stile', s[:wall_width] - s[:panel_thickness], front, 0,
                              s[:panel_thickness], s[:face_frame_thickness], height, :purpleheart_solid, grain: :z)
       modules
     end
 
     def continuous_desk_face_frame(modules)
-      left = layout[:filler_width]
-      right = left + layout[:desk_width] - layout[:panel_thickness]
+      left = layout[:panel_thickness]
+      right = layout[:filler_width] + layout[:desk_width] - layout[:panel_thickness]
       continuous_horizontal_face_frame(modules, 'Desk', left, right, 48.0)
     end
 
@@ -478,17 +548,11 @@ module MyriBuiltin
       root.name = 'Myri Built-in'
       root.set_attribute('MyriBuiltin', 'generated_root', true)
 
+      definitions = {}
       plan.each do |assembly|
-        group = root.entities.add_group
-        group.name = assembly[:name]
-        group.set_attribute('MyriBuiltin', 'shop_built', assembly[:shop_built])
-        origin = 3.times.map { |axis| assembly[:parts].map { |item| item[:origin][axis] }.min }
-        assembly[:parts].each do |item|
-          local_origin = 3.times.map { |axis| item[:origin][axis] - origin[axis] }
-          add_component(model, group.entities, materials, item.merge(origin: local_origin))
-        end
-        group.transform!(Geom::Transformation.translation(origin))
+        add_assembly(model, root.entities, materials, assembly, definitions)
       end
+      add_led_illumination(model, root.entities, planned_parts) if layout[:show_led_illumination]
       add_myri_figure(root.entities, planned_parts.find { |item| item[:name] == 'Full mattress' })
 
       model.commit_operation
@@ -509,9 +573,13 @@ module MyriBuiltin
       names = {}
       items.each do |item|
         name = item[:name]
-        raise ArgumentError, "Duplicate part name: #{name}" if names[name]
+        previous = names[name]
+        shared_instance = previous && item[:definition_name] &&
+                          previous[:definition_name] == item[:definition_name] &&
+                          component_signature(previous) == component_signature(item)
+        raise ArgumentError, "Duplicate part name: #{name}" if previous && !shared_instance
 
-        names[name] = true
+        names[name] = item
         valid_size = item[:size].all? { |n| n.finite? && n >= 0.001 }
         valid_origin = item[:origin].all?(&:finite?)
         unless valid_size && valid_origin
@@ -526,6 +594,54 @@ module MyriBuiltin
     end
 
     private
+
+    # A translucent back-panel wash is a visual guide, not a lighting simulation.
+    # Loose faces in a separate group keep the preview out of component cut lists.
+    def add_led_illumination(model, entities, parts)
+      preview = entities.add_group
+      preview.name = 'LED illumination preview - hide to disable'
+      preview.casts_shadows = false
+      preview.receives_shadows = false
+      back_y = -layout[:back_recess] - layout[:back_thickness] - 0.02
+      bands = 12
+      materials = bands.times.map do |index|
+        name = "Myri LED wash #{index + 1}"
+        material = model.materials[name] || model.materials.add(name)
+        material.color = Sketchup::Color.new(255, 220, 150)
+        material.alpha = 0.32 * (1.0 - index.to_f / bands)**2
+        material
+      end
+      parts.select { |item| item[:material] == :led }.each do |strip|
+        x, _, top = strip[:origin]
+        width = strip[:size][0]
+        bands.times do |index|
+          z_top = top - 10.0 * index / bands
+          z_bottom = top - 10.0 * (index + 1) / bands
+          points = [[x, back_y, z_top], [x + width, back_y, z_top],
+                    [x + width, back_y, z_bottom], [x, back_y, z_bottom]]
+          face = preview.entities.add_face(points.map { |point| point.map(&:inch) })
+          face.material = materials[index]
+          face.back_material = materials[index]
+          face.casts_shadows = false
+          face.receives_shadows = false
+        end
+      end
+      preview.entities.grep(Sketchup::Edge).each { |edge| edge.hidden = true }
+      preview
+    end
+
+    def add_assembly(model, entities, materials, assembly, definitions)
+      group = entities.add_group
+      group.name = assembly[:name]
+      group.set_attribute('MyriBuiltin', 'shop_built', assembly[:shop_built])
+      origin = 3.times.map { |axis| assembly[:parts].map { |item| item[:origin][axis] }.min }
+      assembly[:parts].each do |item|
+        local_origin = 3.times.map { |axis| item[:origin][axis] - origin[axis] }
+        add_component(model, group.entities, materials, item.merge(origin: local_origin), definitions)
+      end
+      group.transform!(Geom::Transformation.translation(origin))
+      group
+    end
 
     def add_myri_figure(entities, mattress)
       path = File.join(__dir__, 'myri_hark_kneeling.png')
@@ -573,9 +689,17 @@ module MyriBuiltin
 
     def create_materials(model)
       textures = wood_textures
+      types = material_types
+      thicknesses = material_stock_thicknesses
       material_palette.each_with_object({}) do |(key, rgb), collection|
-        name = "Myri #{key.to_s.split('_').map(&:capitalize).join(' ')}"
+        name = key.to_s.split('_').map(&:capitalize).join(' ')
         material = model.materials[name] || model.materials.add(name)
+        material.set_attribute('ladb_opencutlist', 'type', types[key]) if types.key?(key)
+        if thicknesses.key?(key)
+          existing = material.get_attribute('ladb_opencutlist', 'std_thicknesses', '').to_s.split(';')
+          stock = (existing.map(&:strip).reject(&:empty?) + thicknesses[key]).uniq
+          material.set_attribute('ladb_opencutlist', 'std_thicknesses', stock.join(';'))
+        end
         material.texture = nil
         material.color = Sketchup::Color.new(*rgb)
         settings = textures[key]
@@ -620,37 +744,44 @@ module MyriBuiltin
       face.position_material(material, mapping, true)
     end
 
-    def add_component(model, parent_entities, materials, part_data)
-      name = part_data[:name]
-      width, depth, height = part_data[:size]
-      definition_name = "MyriBuiltin - #{name}"
-      definition = model.definitions[definition_name] || model.definitions.add(definition_name)
-      definition.entities.clear!
+    def add_component(model, parent_entities, materials, part_data, definitions = {})
+      definition_name = part_data.fetch(:definition_name, part_data[:name])
+      definition = definitions[definition_name] ||= create_part_definition(model, materials, part_data, definition_name)
+      transform = Geom::Transformation.translation(part_data[:origin].map(&:inch))
+      instance = parent_entities.add_instance(definition, transform)
+      instance.name = definition_name
+      instance.material = materials.fetch(part_data[:material])
+      instance
+    end
 
+    def create_part_definition(model, materials, part_data, name)
+      definition = model.definitions[name] || model.definitions.add(name)
+      definition.entities.clear!
+      width, depth, height = part_data[:size]
       if part_data[:taper_inset]
         add_tapered_leg(definition.entities, width, depth, height, part_data[:taper_inset])
       else
         add_box(definition.entities, width, depth, height)
       end
-      material = materials.fetch(part_data[:material])
-      texture_settings = wood_textures.fetch(part_data[:material]) if material.texture
-      axes = { x: Geom::Vector3d.new(1, 0, 0), y: Geom::Vector3d.new(0, 1, 0), z: Geom::Vector3d.new(0, 0, 1) } if material.texture
-      definition.entities.grep(Sketchup::Face).each do |part_face|
-        part_face.material = material
-        position_wood_texture(part_face, material, part_data, texture_settings, axes) if material.texture
-      end
-
-      x, y, z = part_data[:origin]
-      transform = Geom::Transformation.translation([x.inch, y.inch, z.inch])
-      instance = parent_entities.add_instance(definition, transform)
-      instance.name = name
-      instance.material = materials.fetch(part_data[:material])
-
+      paint_part_faces(definition.entities, materials.fetch(part_data[:material]), part_data)
       definition.set_attribute('MyriBuiltin', 'generated_part', true)
-      definition.set_attribute('MyriBuiltin', 'width_in', width)
-      definition.set_attribute('MyriBuiltin', 'depth_in', depth)
-      definition.set_attribute('MyriBuiltin', 'height_in', height)
-      instance
+      %w[width_in depth_in height_in].zip(part_data[:size]).each do |key, value|
+        definition.set_attribute('MyriBuiltin', key, value)
+      end
+      definition
+    end
+
+    def paint_part_faces(entities, material, part_data)
+      if material.texture
+        texture_settings = wood_textures.fetch(part_data[:material])
+        axes = { x: Geom::Vector3d.new(1, 0, 0),
+                 y: Geom::Vector3d.new(0, 1, 0),
+                 z: Geom::Vector3d.new(0, 0, 1) }
+      end
+      entities.grep(Sketchup::Face).each do |face|
+        face.material = material
+        position_wood_texture(face, material, part_data, texture_settings, axes) if material.texture
+      end
     end
 
     def add_box(entities, width, depth, height)

@@ -22,14 +22,14 @@ class ModelTest < Minitest::Test
       end]
     end
     # Reviewed design with a continuous desk/bed headers and outer stiles.
-    assert_equal 'b838177c10b084bf7f8c33f4efd2e21f50dd6bce26597d62f6d0243cff7e83d7',
+    assert_equal 'e3456a82c44d0c8d32529eeeaf9c3ac4234ccea2fb32e58df7c5d44232032795',
                  Digest::SHA256.hexdigest(JSON.generate(signature))
   end
 
   def test_desk_header_is_one_continuous_rail
     rail = @parts.find { |p| p[:name] == 'Desk continuous horizontal purpleheart face frame' }
-    assert_equal [1.0, -13.75, 48.0], rail[:origin]
-    assert_equal [43.875, 0.75, 1.5], rail[:size]
+    assert_equal [0.75, -13.75, 48.0], rail[:origin]
+    assert_equal [44.125, 0.75, 1.5], rail[:size]
     refute @parts.any? { |p| p[:name] == 'D1 Desk lower surround top purpleheart frame z22.75-24.25' }
     stile = @parts.find { |p| p[:name] == 'Desk upper center purpleheart stile' }
     assert_equal 49.5, stile[:origin][2]
@@ -63,10 +63,29 @@ class ModelTest < Minitest::Test
 
   def test_desk_top_frame_is_continuous
     rail = @parts.find { |p| p[:name] == 'Desk top continuous horizontal purpleheart face frame' }
-    assert_equal [1.0, -13.75, 94.75], rail[:origin]
-    assert_equal [43.875, 0.75, 0.75], rail[:size]
+    assert_equal [0.75, -13.75, 94.75], rail[:origin]
+    assert_equal [44.125, 0.75, 0.75], rail[:size]
     stile = @parts.find { |p| p[:name] == 'Desk upper center purpleheart stile' }
     assert_equal 94.75, stile[:origin][2] + stile[:size][2]
+  end
+
+  def test_drawer_sides_and_ends_are_half_inch_baltic_birch
+    walls = @parts.select { |p| p[:name].match?(/drawer.* (side|end) [12]$/) }
+    assert_equal 24, walls.size
+    assert walls.all? { |p| p[:material] == :baltic_birch_plywood && p[:size].min == 0.5 }
+    refute @parts.any? { |p| p[:name].start_with?('Ceiling scribe') }
+  end
+
+  def test_drawer_bottoms_are_half_inch_baltic_birch
+    bottoms = @parts.select { |p| p[:name].match?(/^(Desk (file drawer|drawer \d+)|Nightstand drawer \d+) bottom$/) }
+    assert_equal 6, bottoms.size
+    assert bottoms.all? { |p| p[:size][2] == 0.5 && p[:material] == :baltic_birch_plywood }
+  end
+
+  def test_desk_sides_are_three_quarter_plywood
+    sides = @parts.select { |p| p[:name].match?(/^D[13] .* (left|right) side$/) }
+    assert_equal 4, sides.size
+    assert sides.all? { |p| p[:size][0] == 0.75 && p[:material] == :walnut_plywood }
   end
 
   def test_regeneration_is_stable_and_does_not_share_mutable_parts
@@ -77,7 +96,7 @@ class ModelTest < Minitest::Test
 
   def test_all_parts_have_valid_geometry_and_unique_names
     MyriBuiltin.validate_parts!(@parts)
-    assert_equal 173, @parts.size
+    assert_equal 171, @parts.size
     assert @parts.all? { |part| MyriBuiltin.material_palette.key?(part[:material]) }
   end
 
