@@ -1,4 +1,4 @@
-# Myri Built-in — VS Code and SketchUp
+# Myri Built-in MkI — VS Code and SketchUp
 
 This project generates the measured bedroom built-in as native SketchUp
 components. Every panel, shelf, drawer front, bed part and back panel is a
@@ -12,13 +12,13 @@ separate component.
 4. Enter the following command, replacing the path with the folder location:
 
    ```ruby
-   load '/Users/your-name/Documents/MyriBuiltin/MyriBuiltin_LiveReload.rb'
+   load '/Users/your-name/Documents/MyriBuiltin/MyriBuiltin_MkI_LiveReload.rb'
    ```
 
-5. Edit and save `MyriBuiltin.rb` in VS Code.
+5. Edit and save `MyriBuiltin_MkI.rb` in VS Code.
 
 SketchUp checks the file approximately every 0.75 seconds. Each save removes
-the previously generated `Myri Built-in` group and rebuilds it without changing
+the previously generated `Myri Built-in MkI` group and rebuilds it without changing
 the current camera view.
 
 ## Stop live reload
@@ -26,7 +26,7 @@ the current camera view.
 Enter this in the SketchUp Ruby Console:
 
 ```ruby
-MyriBuiltinLiveReload.stop
+MyriBuiltin_MkILiveReload.stop
 ```
 
 ## Editing the design
@@ -66,7 +66,7 @@ this setup does not simulate end grain or exposed plywood layers.
 
 Use SketchUp's Shaded with Textures face style to see the images. Save the Ruby
 file to rebuild after changing material settings. If you replace only a PNG,
-run `MyriBuiltinLiveReload.reload_script` in the Ruby Console to refresh it.
+run `MyriBuiltin_MkILiveReload.reload_script` in the Ruby Console to refresh it.
 
 ## Checking script changes
 

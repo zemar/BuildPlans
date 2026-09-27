@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
-# Myri Built-in 2
+# Myri Built-in MkI
 # A measured, rebuildable SketchUp model for a 128 x 96 inch bedroom wall.
 #
 # Development:
 #   1. Open this folder in VS Code.
-#   2. In SketchUp's Ruby Console, load MyriBuiltin2_LiveReload.rb once.
+#   2. In SketchUp's Ruby Console, load MyriBuiltin_MkI_LiveReload.rb once.
 #   3. Save this file. SketchUp will rebuild the model automatically.
 
-module MyriBuiltin2
+module MyriBuiltin_MkI
   class << self
     # Main dimensions are in inches. These are the first values to edit.
     def layout
@@ -315,16 +315,17 @@ module MyriBuiltin2
                      bottom: false)
       modules << desk
       modules << desk_pedestal
-      # D1's top is desk shelf 1. D3 has no bottom, avoiding a doubled shelf.
-      # Both shelves span the full opening; there is no center divider.
-      modules << carcass('D3 Desk full-width upper', 0, 48.75, desk_width, top - 48.75,
-                         bottom: false, shelves: [72])
+      # Two separate boxes replace the shared central upright.
+      modules << carcass('D3 Desk upper left', 0, 48.75, 23.5, top - 48.75,
+                         shelves: [60, 72, 84])
+      modules << carcass('D4 Desk upper right', 23.5, 48.75, desk_width - 23.5, top - 48.75,
+                         shelves: [60, 72, 84])
       nightstand = carcass('N1 Nightstand drawers', tower_x, 0, s[:tower_width], 28.75)
       nightstand[:parts].concat(nightstand_drawer_parts)
       modules << nightstand
-      # N1 supplies the base; exactly three shelves above the nightstand.
-      modules << carcass('N2 Nightstand open shelves', tower_x, 28.75, s[:tower_width], top - 28.75,
-                         bottom: false, shelves: [45, 61.5, 78])
+      modules << carcass('N2 Nightstand cubby', tower_x, 28.75, s[:tower_width], 19.25)
+      modules << carcass('N3 Nightstand upper', tower_x, 48, s[:tower_width], top - 48,
+                         shelves: [60, 72, 84])
       3.times do |index|
         width = s[:bed_width] / 3.0
         x = desk_width + index * width
@@ -338,7 +339,7 @@ module MyriBuiltin2
       loose = [
         part('Desk top', t, -24, 29.25, desk_width - 2 * t, 24 - s[:back_recess] - s[:back_thickness], 1.5, :walnut_solid),
         led_strip('Desk LED', 2.5, 48.0, 42),
-        led_strip('Nightstand LED', tower_x + 1.5, 45.0, s[:tower_width] - 3)
+        led_strip('Nightstand LED', tower_x + 1.5, 47.25, s[:tower_width] - 3)
       ]
       modules.concat(headboard_carcasses)
       modules << { name: 'I1 Site-installed top, trim and lighting', shop_built: false, parts: loose }
@@ -378,7 +379,7 @@ module MyriBuiltin2
 
     # Geometry is local to the definition; placement and labels belong to instances.
     def component_signature(item)
-      item.values_at(:size, :material, :grain, :taper_inset, :dado, :corner_radius)
+      item.values_at(:size, :material, :grain, :taper_inset, :dado)
     end
 
     def share_drawer_box_components(modules)
@@ -434,7 +435,7 @@ module MyriBuiltin2
     def continuous_desk_face_frame(modules)
       left = layout[:panel_thickness]
       right = layout[:filler_width] + layout[:desk_width] - layout[:panel_thickness]
-      continuous_horizontal_face_frame(modules, 'Desk', left, right, 48.0, height: layout[:panel_thickness])
+      continuous_horizontal_face_frame(modules, 'Desk', left, right, 48.0)
     end
 
     def continuous_horizontal_face_frame(modules, label, left, right, bottom, height: 1.5, stile_edge: :bottom)
@@ -575,14 +576,14 @@ module MyriBuiltin2
       planned_parts = plan.flat_map { |assembly| assembly[:parts] }
       validate_parts!(planned_parts)
       model = Sketchup.active_model
-      model.start_operation('Rebuild Myri Built-in 2', true)
+      model.start_operation('Rebuild Myri Built-in MkI', true)
       operation_open = true
 
       previous_model_existed = remove_previous_model(model)
       materials = create_materials(model)
       root = model.entities.add_group
-      root.name = 'Myri Built-in 2'
-      root.set_attribute('MyriBuiltin2', 'generated_root', true)
+      root.name = 'Myri Built-in MkI'
+      root.set_attribute('MyriBuiltin_MkI', 'generated_root', true)
 
       definitions = {}
       plan.each do |assembly|
@@ -594,13 +595,13 @@ module MyriBuiltin2
       model.commit_operation
       operation_open = false
       model.active_view.zoom_extents unless previous_model_existed
-      message = "Myri Built-in 2 rebuilt: #{planned_parts.length} components"
+      message = "Myri Built-in MkI rebuilt: #{planned_parts.length} components"
       Sketchup.status_text = message
       puts(message)
       root
     rescue StandardError => error
       model.abort_operation if model && operation_open
-      warn("Myri Built-in 2 error: #{error.message}")
+      warn("Myri Built-in MkI error: #{error.message}")
       warn(error.backtrace.join("\n"))
       raise
     end
@@ -669,7 +670,7 @@ module MyriBuiltin2
     def add_assembly(model, entities, materials, assembly, definitions)
       group = entities.add_group
       group.name = assembly[:name]
-      group.set_attribute('MyriBuiltin2', 'shop_built', assembly[:shop_built])
+      group.set_attribute('MyriBuiltin_MkI', 'shop_built', assembly[:shop_built])
       origin = 3.times.map { |axis| assembly[:parts].map { |item| item[:origin][axis] }.min }
       assembly[:parts].each do |item|
         local_origin = 3.times.map { |axis| item[:origin][axis] - origin[axis] }
@@ -709,15 +710,15 @@ module MyriBuiltin2
       rotation = Geom::Transformation.rotation([0, 0, 0], [1, 0, 0], Math::PI / 2)
       figure.transform!(Geom::Transformation.translation(origin) * rotation)
       figure.casts_shadows = false
-      figure.set_attribute('MyriBuiltin2', 'standing_height_in', s[:person_standing_height])
-      figure.set_attribute('MyriBuiltin2', 'kneeling_height_in', kneeling_height)
+      figure.set_attribute('MyriBuiltin_MkI', 'standing_height_in', s[:person_standing_height])
+      figure.set_attribute('MyriBuiltin_MkI', 'kneeling_height_in', kneeling_height)
       figure
     end
 
     def remove_previous_model(model)
       previous_groups = model.entities.grep(Sketchup::Group).select do |group|
-        generated = group.get_attribute('MyriBuiltin2', 'generated_root', false)
-        generated || group.name == 'Myri Built-in 2'
+        generated = group.get_attribute('MyriBuiltin_MkI', 'generated_root', false)
+        generated || group.name == 'Myri Built-in MkI' || group.name == 'Walnut Bedroom Built-in'
       end
       previous_groups.each(&:erase!)
       !previous_groups.empty?
@@ -791,12 +792,10 @@ module MyriBuiltin2
     end
 
     def create_part_definition(model, materials, part_data, name)
-      definition = model.definitions["MyriBuiltin2 - #{name}"] || model.definitions.add("MyriBuiltin2 - #{name}")
+      definition = model.definitions[name] || model.definitions.add(name)
       definition.entities.clear!
       width, depth, height = part_data[:size]
-      if part_data[:corner_radius]
-        add_rounded_leg(definition.entities, width, depth, height, part_data[:corner_radius])
-      elsif part_data[:dado]
+      if part_data[:dado]
         add_dado_panel(definition.entities, part_data[:size], part_data[:dado])
       elsif part_data[:taper_inset]
         add_tapered_leg(definition.entities, width, depth, height, part_data[:taper_inset])
@@ -804,9 +803,9 @@ module MyriBuiltin2
         add_box(definition.entities, width, depth, height)
       end
       paint_part_faces(definition.entities, materials.fetch(part_data[:material]), part_data)
-      definition.set_attribute('MyriBuiltin2', 'generated_part', true)
+      definition.set_attribute('MyriBuiltin_MkI', 'generated_part', true)
       %w[width_in depth_in height_in].zip(part_data[:size]).each do |key, value|
-        definition.set_attribute('MyriBuiltin2', key, value)
+        definition.set_attribute('MyriBuiltin_MkI', key, value)
       end
       definition
     end
@@ -851,27 +850,6 @@ module MyriBuiltin2
       face.pushpull(length.inch)
     end
 
-    # Quarter-circle corners run the full height of the square leg.
-    def add_rounded_leg(entities, width, depth, height, radius)
-      corners = [[width - radius, radius, -90], [width - radius, depth - radius, 0],
-                 [radius, depth - radius, 90], [radius, radius, 180]]
-      points = corners.flat_map do |cx, cy, start_angle|
-        (0..8).map do |step|
-          angle = (start_angle + step * 90.0 / 8) * Math::PI / 180
-          [(cx + radius * Math.cos(angle)).inch, (cy + radius * Math.sin(angle)).inch, 0]
-        end
-      end
-      face = entities.add_face(points)
-      face.reverse! if face.normal.z.negative?
-      face.pushpull(height.inch)
-      entities.grep(Sketchup::Edge).each do |edge|
-        next unless (edge.start.position.z - edge.end.position.z).abs > height / 2.0
-
-        edge.soft = true
-        edge.smooth = true
-      end
-    end
-
     def add_box(entities, width, depth, height)
       points = [
         [0, 0, 0],
@@ -902,4 +880,4 @@ module MyriBuiltin2
   end
 end
 
-MyriBuiltin2.build
+MyriBuiltin_MkI.build

@@ -5,12 +5,12 @@ require 'json'
 require 'digest'
 
 # Exercise the pure model description without invoking SketchUp's renderer.
-script = File.expand_path('../MyriBuiltin.rb', __dir__)
-eval(File.read(script).sub(/MyriBuiltin.build\s*\z/, ''), TOPLEVEL_BINDING, script)
+script = File.expand_path('../MyriBuiltin_MkI.rb', __dir__)
+eval(File.read(script).sub(/MyriBuiltin_MkI.build\s*\z/, ''), TOPLEVEL_BINDING, script)
 
 class ModelTest < Minitest::Test
   def setup
-    @plan = MyriBuiltin.assemblies
+    @plan = MyriBuiltin_MkI.assemblies
     @parts = @plan.flat_map { |assembly| assembly[:parts] }
   end
 
@@ -89,15 +89,15 @@ class ModelTest < Minitest::Test
   end
 
   def test_regeneration_is_stable_and_does_not_share_mutable_parts
-    assert_equal @plan, MyriBuiltin.assemblies
+    assert_equal @plan, MyriBuiltin_MkI.assemblies
     @parts.first[:origin][0] = -1000
-    refute_equal @plan, MyriBuiltin.assemblies
+    refute_equal @plan, MyriBuiltin_MkI.assemblies
   end
 
   def test_all_parts_have_valid_geometry_and_unique_names
-    MyriBuiltin.validate_parts!(@parts)
+    MyriBuiltin_MkI.validate_parts!(@parts)
     assert_equal 171, @parts.size
-    assert @parts.all? { |part| MyriBuiltin.material_palette.key?(part[:material]) }
+    assert @parts.all? { |part| MyriBuiltin_MkI.material_palette.key?(part[:material]) }
   end
 
   def test_no_solid_parts_overlap
@@ -111,14 +111,14 @@ class ModelTest < Minitest::Test
   end
 
   def test_zero_width_roundoff_is_rejected_with_a_part_name
-    invalid = MyriBuiltin.part('Degenerate strip', 0, 0, 0, 1.4e-14, 0.75, 0.75, :purpleheart_solid)
-    error = assert_raises(ArgumentError) { MyriBuiltin.validate_parts!([invalid]) }
+    invalid = MyriBuiltin_MkI.part('Degenerate strip', 0, 0, 0, 1.4e-14, 0.75, 0.75, :purpleheart_solid)
+    error = assert_raises(ArgumentError) { MyriBuiltin_MkI.validate_parts!([invalid]) }
     assert_includes error.message, 'Degenerate strip'
   end
 
   def test_bad_tapers_and_duplicate_names_are_rejected
-    invalid = MyriBuiltin.part('Bad leg', 0, 0, 0, 3, 1.5, 8, :walnut_solid).merge(taper_inset: [2, 0.25])
-    assert_raises(ArgumentError) { MyriBuiltin.validate_parts!([invalid]) }
-    assert_raises(ArgumentError) { MyriBuiltin.validate_parts!([@parts.first, @parts.first]) }
+    invalid = MyriBuiltin_MkI.part('Bad leg', 0, 0, 0, 3, 1.5, 8, :walnut_solid).merge(taper_inset: [2, 0.25])
+    assert_raises(ArgumentError) { MyriBuiltin_MkI.validate_parts!([invalid]) }
+    assert_raises(ArgumentError) { MyriBuiltin_MkI.validate_parts!([@parts.first, @parts.first]) }
   end
 end

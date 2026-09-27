@@ -1,17 +1,17 @@
 # frozen_string_literal: true
 
-# Load this file once from SketchUp's Ruby Console. It watches MyriBuiltin.rb
+# Load this file once from SketchUp's Ruby Console. It watches MyriBuiltin_MkIII.rb
 # and automatically reloads it whenever VS Code saves the file.
 
-module MyriBuiltinLiveReload
+module MyriBuiltin_MkIIILiveReload
   class << self
     def start
       stop
-      @script_path = File.expand_path('MyriBuiltin.rb', __dir__)
+      @script_path = File.expand_path('MyriBuiltin_MkIII.rb', __dir__)
       @last_modified = nil
       reload_script
       @timer_id = UI.start_timer(0.75, true) { reload_if_changed }
-      puts("Myri Built-in live reload watching: #{@script_path}")
+      puts("Myri Built-in MkIII live reload watching: #{@script_path}")
     end
 
     def stop
@@ -19,7 +19,7 @@ module MyriBuiltinLiveReload
 
       UI.stop_timer(@timer_id)
       @timer_id = nil
-      puts('Myri Built-in live reload stopped')
+      puts('Myri Built-in MkIII live reload stopped')
     end
 
     def reload_if_changed
@@ -34,7 +34,7 @@ module MyriBuiltinLiveReload
     def reload_script
       @last_modified = File.mtime(@script_path)
       load(@script_path)
-      Sketchup.status_text = 'Myri Built-in reloaded from VS Code'
+      Sketchup.status_text = 'Myri Built-in MkIII reloaded from VS Code'
     rescue StandardError, ScriptError => error
       report_error(error)
     end
@@ -42,11 +42,11 @@ module MyriBuiltinLiveReload
     private
 
     def report_error(error)
-      Sketchup.status_text = "Myri Built-in error: #{error.message}"
-      warn("Myri Built-in live-reload error: #{error.message}")
+      Sketchup.status_text = "Myri Built-in MkIII error: #{error.message}"
+      warn("Myri Built-in MkIII live-reload error: #{error.message}")
       warn(error.backtrace.join("\n"))
     end
   end
 end
 
-MyriBuiltinLiveReload.start
+MyriBuiltin_MkIIILiveReload.start
