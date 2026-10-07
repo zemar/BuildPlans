@@ -1,3 +1,8 @@
 .DS_Store
 *.skp
 *.log
+exports
+launch.json
+result.json
+__pycache__
+*.zlib

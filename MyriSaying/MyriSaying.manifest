@@ -1,0 +1,9 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "script",
+  "author": "",
+  "description": {"": "Generate a 200 x 100 x 10 mm brown plaque with raised white cursive, black frame and two black triangular rear supports."},
+  "version": "1.0.0",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac"
+}

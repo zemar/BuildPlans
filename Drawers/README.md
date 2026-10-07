@@ -1,66 +1,79 @@
-# Drawer1 — four independently removable bins
+# Drawer1 — removable brown bins with snap joints
 
-Run `Drawer1.py` in Fusion using the included `Drawer1.manifest`. It creates four
-separate solid trays in their drawer positions, with their own floors and walls.
-Brown PETG appearance and material labels are retained. There are no shared walls,
-split bins, or glued joints.
+Run `Drawer1.py` in Fusion using `Drawer1.manifest`. The script creates four bins
+as **six separately printable pieces**. Each long bin has a front and rear half
+that snap together. Both short bins are single-piece trays. All pieces now print
+flat; the previous tilted STLs and 3MF files are obsolete for this revision.
 
-All dimensions are mm and assume clear internal drawer measurements.
+Dimensions are mm and assume the drawer measurements are clear internal sizes.
 
-| Item | Width × length × height |
-| --- | --- |
-| Drawer | 244.475 × 527.05 × 76.2 |
-| Four-bin arrangement | 242.475 × 525.05 × 65 |
-| Each long bin, exterior | 121.0375 × 360.4 × 65 |
-| Each long bin, clear interior | 116.2375 × 355.6 × 63 |
-| Each short bin, exterior | 121.0375 × 164.25 × 65 |
-| Each short bin, clear interior | 116.2375 × 159.45 × 63 |
-| Each long STL at 45°, print envelope | 121.0375 × 300.8032 × 300.8032 |
+| Bin | Clear width × length | Assembled exterior width × length × height |
+| --- | --- | --- |
+| Long left | 116.2375 × 355.6 (14 in) | 121.0375 × 360.4 × 65 |
+| Short left | 116.2375 × 159.45 | 121.0375 × 164.25 × 65 |
+| Long right | 116.2375 × 304.8 (12 in) | 121.0375 × 309.6 × 65 |
+| Short right | 116.2375 × 210.25 (about 8.28 in) | 121.0375 × 215.05 × 65 |
 
-Two long bins sit side-by-side at the front, two short bins behind them.
-Each bin has 2.4 mm walls and a 2 mm floor. There is 0.4 mm between bins,
-1 mm clearance around the arrangement, and 11.2 mm above the walls.
-The long bins have exactly 355.6 mm clear length, without extra end clearance
-for the nominal 14-inch tools. Separate walls reduce the short-bin length from
-the previous shared-wall layout. Change the constants in the script and rerun
-to adjust dimensions.
+The requested 12 + 8.75 inches equals the drawer's entire 20.75-inch length.
+Keeping 12 inches clear in the long-right bin leaves 210.25 mm clear in the
+short-right after subtracting four end walls, the gap, and outside clearance.
+The arrangement remains 242.475 × 525.05 mm inside the 244.475 × 527.05 mm drawer.
+There is 1 mm clearance at each outside edge and 0.4 mm between independent bins.
+Walls are 2.4 mm; floors are 2 mm. Standard clear height is 63 mm above the floor.
+The snap socket roofs rise to 3.5 mm above the underside locally.
+
+## Snap joint and assembly
+
+Each long bin has a 0.3 mm seam gap and no transverse wall at its seam. Two pairs
+of flexible floor fingers slide into covered sockets in the rear half. Tapered
+noses compress the fingers inward; shoulders latch into wider pockets. Socket
+roofs capture the fingers vertically. The clips stay within the assembled bin's
+footprint and do not project into neighboring bins.
+
+Print the mating halves separately, floor down, **supports off**. The socket roofs
+have short bridges up to 8.4 mm wide; inspect these in the slicer. Remove any brim
+or elephant-foot interference from the fingers and socket mouths. Slide front
+and rear together on a flat surface until both joints engage. The seam should
+remain approximately 0.3 mm. To release, access the open socket undersides and
+squeeze the finger tips inward while separating the halves. Support both halves
+when lifting a loaded bin; the joint has not been load-tested.
+
+**Test the fit first:** set `JOINT_TEST_ONLY = True` and rerun to export two small
+40 mm-wide test pieces using the same joint geometry. Print them with the same
+filament and slicer settings intended for the bins. After checking fit, restore
+`JOINT_TEST_ONLY = False` and rerun. These are prototype snap fits; printer/material
+variation may require adjustment. Matching parts need clearance, as described in
+[Prusa's design guidance](https://help.prusa3d.com/article/modeling-with-3d-printing-in-mind_164135).
 
 ## Run and export
 
 1. In Fusion open **Utilities → Scripts and Add-Ins → Scripts**.
-2. Add the existing `Drawer1` folder and run **Drawer1**.
-3. The script creates a new document and exports to `exports/<timestamp>/`:
-   - `Drawer1_Long_Left.stl` and `Drawer1_Long_Right.stl`: already tilted 45°.
-   - `Drawer1_Short_Left.stl` and `Drawer1_Short_Right.stl`: flat on their floors.
-   - `Drawer1.f3d`: editable archive with all four bins upright in drawer positions.
-4. Use the latest export directory; older STLs represent earlier layouts.
+2. Add this existing `Drawers` folder and run **Drawer1**.
+3. Use the new timestamped directory under `exports/`. It contains:
+   - `Drawer1_Long_Left_Front.stl` and `Drawer1_Long_Left_Rear.stl`
+   - `Drawer1_Long_Right_Front.stl` and `Drawer1_Long_Right_Rear.stl`
+   - `Drawer1_Short_Left.stl` and `Drawer1_Short_Right.stl`
+   - `Drawer1.f3d`, with the pieces shown assembled.
+4. Each run appends inputs, construction details, dimensions, export paths, and
+   error tracebacks to `Drawer1.log`. Earlier logs and exports are preserved.
 
-Every run appends inputs, geometry checks, export dimensions, warnings, and full
-error tracebacks to `Drawer1.log` alongside the script. The Fusion archive remains
-upright; the script rotates only the exported STL coordinates and normals, then
-places each mesh at Z=0. This rotation does not change the bin dimensions.
+## Printing
 
-## Print in Bambu Studio
+Use the H2D single-nozzle profile, brown filament, 100% scale, floor down, no supports.
+An 8 mm brim allowance is included in the geometry fit checks. Check the actual
+brim footprint and socket bridges in the sliced preview before printing.
 
-Select the H2D single-nozzle profile and your **brown PETG** filament profile.
-Import each long STL on a separate plate at 100% scale. **Keep the supplied 45°
-orientation**: do not auto-orient or lay it flat. Enable supports, including beneath
-the inclined floor, and use a brim for bed adhesion. The tilted bin contacts the
-bed along an edge, so supports are essential. Preview the slice and ensure all
-unsupported regions are covered and that supports and brim stay within the bed.
-Support settings are slicer settings and are NOT embedded in STL files.
+| Piece | Print envelope: width × length × height (mm) |
+| --- | --- |
+| Left front, including fingers | 121.0375 × 198.05 × 65 |
+| Left rear | 121.0375 × 180.05 × 65 |
+| Right front, including fingers | 121.0375 × 172.65 × 65 |
+| Right rear | 121.0375 × 154.65 × 65 |
+| Short left | 121.0375 × 164.25 × 65 |
+| Short right | 121.0375 × 215.05 × 65 |
 
-The calculated long-bin envelope fits the H2D single-nozzle
-[325 × 320 × 325 mm build volume](https://eu.store.bambulab.com/products/h2d),
-with an 8 mm allowance on each horizontal side. Actual generated supports may
-extend farther; confirm the complete sliced footprint. These parts have not been
-sliced or physically print-tested here. Tilted printing consumes additional
-support material and leaves support-contact marks.
-
-The short bins print flat without supports; both can fit on one plate side-by-side.
-Thus there are four one-piece bins, typically **three plates total** (two long-bin
-plates and one plate holding both short bins). Select filament-specific temperatures
-and plate preparation for your actual spool and plate. STL files do not store color.
-
-The script requires Fusion's bundled `adsk` modules. Local checks cover dimensions,
-Python syntax, and STL rotation; Fusion must be run to verify the new CAD solids.
+All six pieces individually fit the H2D flat. Two pieces can generally share a
+plate side-by-side; verify spacing and brim clearance in Bambu Studio. STL files
+do not embed filament or support settings. The script does not slice or print.
+Local checks validate layout and snap geometry; Fusion execution and physical
+snap-fit testing are still required for this revision.
