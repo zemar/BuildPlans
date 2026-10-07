@@ -1,0 +1,11 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "script",
+  "author": "",
+  "description": {
+    "": "Generate a 5-inch volleyball trophy with tapered base, twisted stand, raised white base lettering and raised black year on the ball."
+  },
+  "version": "3.0.0",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac"
+}

@@ -1,0 +1,8 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "script",
+  "author": "",
+  "description": {"": "One black PETG shower basket with glass-panel hooks. All dimensions in mm."},
+  "version": "1.0.0",
+  "supportedOS": "windows|mac"
+}

@@ -1,9 +1,0 @@
-{
-  "autodeskProduct": "Fusion360",
-  "type": "script",
-  "author": "",
-  "description": {"": "Creates a 5-inch Valley Catholic 2026 trophy with separate volleyball, base, stand, and writing bodies, plus a sidecar run log."},
-  "version": "2.2.0",
-  "runOnStartup": false,
-  "supportedOS": "windows|mac"
-}

@@ -1,0 +1,11 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "script",
+  "author": "",
+  "description": {
+    "": "Create four independently removable brown PETG bins; export long bins tilted 45 degrees for supported H2D printing and short bins flat."
+  },
+  "version": "2.0.0",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac"
+}

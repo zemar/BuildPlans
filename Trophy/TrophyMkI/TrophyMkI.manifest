@@ -1,0 +1,9 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "script",
+  "author": "",
+  "description": {"": "Generate trophy."},
+  "version": "1.2.0",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac"
+}

@@ -1,6 +1,6 @@
 # Valley Catholic 2026 multicolor volleyball trophy
 
-Run `ValleyCatholicTrophy.py` inside Autodesk Fusion. It creates a new document
+Run `Trophy.py` inside Autodesk Fusion. It creates a new document
 with a 127 mm / 5 inch trophy and an 88 × 64 mm footprint. The model is
 Z-up with its underside at Z=0. A single `Trophy` component contains all four bodies.
 
