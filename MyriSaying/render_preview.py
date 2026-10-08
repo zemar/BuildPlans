@@ -1,4 +1,5 @@
 """Render actual mesh geometry on the CPU; requires NumPy and Pillow only."""
+import math
 import numpy as np
 from PIL import Image
 
@@ -60,6 +61,8 @@ if __name__ == '__main__':
     model.start_log()
     try:
         parts,_ = model.build()
+        angle = math.radians(model.LEAN_DEGREES)
+        render(parts, (0,15-400*math.cos(angle),48+400*math.sin(angle)), 'preview.png')
         render(parts, (220,-380,200), 'preview-3d.png')
         render(parts, (-230,380,190), 'preview-rear.png')
     except Exception:

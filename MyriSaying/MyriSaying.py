@@ -1,7 +1,7 @@
 """Python-generated plaque; run in Fusion or with `python3 MyriSaying.py`.
 
 Standard library only. The bundled cursive outlines are made by prepare_text.py.
-Coordinates in millimeters: X right, +Y rearward, +Z up; front face Y=0.
+Coordinates in millimeters: X right, +Y rearward, +Z up; panel leans back 10 degrees.
 """
 import hashlib
 import json
@@ -18,21 +18,25 @@ LOG_PATH = HERE / 'MyriSaying.log'
 LOGGER = logging.getLogger('MyriSaying')
 WIDTH_MM = 200.0
 HEIGHT_MM = 100.0
-THICKNESS_MM = 10.0
-FRAME_MM = 4.0
+THICKNESS_MM = 3.0
+FRAME_MM = 6.0
 RAISED_MM = 1.2
+LEAN_DEGREES = 10.0
+ROPE_STRAND_RADIUS_MM = 1.65
+ROPE_TWIST_RADIUS_MM = 0.85
+ROPE_PITCH_MM = 10.0
 FOOT_WIDTH_MM = 8.0
 FOOT_DEPTH_MM = 40.0
 FOOT_HEIGHT_MM = 65.0
 FOOT_CENTERS_MM = (-65.0, 65.0)
-FONT_NAME = 'Brush Script MT'
+FONT_NAME = 'Snell Roundhand Bold'
 # Text, visible outline height, center height. All values are millimeters.
 LINES = [
-    ("The super power that you'll", 11.0, 81.0),
-    ('never lose is being the', 11.0, 64.5),
-    ('best daddy ever.', 13.0, 47.5),
-    ('Myriam Howard', 9.0, 25.5),
-    ('March 19, 2023', 7.5, 12.0),
+    ("The super power that you'll", 14.0, 80.0),
+    ('never lose is being the', 14.0, 60.0),
+    ('best daddy ever.', 16.0, 40.0),
+    ('Myriam Howard', 6.5, 21.0),
+    ('March 19, 2023', 5.0, 12.0),
 ]
 COLORS = {'Brown': '#80451FFF', 'Black': '#101010FF', 'White': '#FFFFFFFF'}
 
@@ -88,13 +92,79 @@ def rect(x0, y0, x1, y1):
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)], [(0, 1, 2), (0, 2, 3)]
 
 
+def lean(point):
+    """Rotate the panel backward, keeping its rear bottom edge on the table."""
+    x,y,z = point
+    angle = math.radians(LEAN_DEGREES)
+    c,s = math.cos(angle), math.sin(angle)
+    return x, y*c+z*s, z*c-y*s+THICKNESS_MM*s
+
+
+def rope_frame():
+    """Closed brown frame with a fused two-strand twisted-rope front relief.
+
+    The visible surface is the upper envelope of two circular rope strands
+    whose centers orbit along the perimeter. A solid backing joins the strands
+    and closes the underside, avoiding coincident/intersecting mesh shells.
+    """
+    w,h,f = WIDTH_MM/2, HEIGHT_MM, FRAME_MM
+    outside = [(-w,0),(w,0),(w,h),(-w,h)]
+    inside = [(-w+f,f),(w-f,f),(w-f,h-f),(-w+f,h-f)]
+    lengths = [WIDTH_MM-f, HEIGHT_MM-f]*2
+    perimeter = sum(lengths)
+    turns = max(1, round(perimeter/ROPE_PITCH_MM))
+    points, relief, faces = [], [], []
+    cross_steps = 24
+    traveled = 0
+    for edge,length in enumerate(lengths):
+        nxt = (edge+1)%4
+        steps = math.ceil(length/0.65)
+        for step in range(steps):
+            t = step/steps
+            outer = [outside[edge][k]*(1-t)+outside[nxt][k]*t for k in (0,1)]
+            inner = [inside[edge][k]*(1-t)+inside[nxt][k]*t for k in (0,1)]
+            phase = 2*math.pi*turns*(traveled+length*t)/perimeter
+            for j in range(cross_steps+1):
+                u = j/cross_steps
+                points.append(tuple(outer[k]*(1-u)+inner[k]*u for k in (0,1)))
+                across = (u-.5)*f
+                height = 0.0
+                for sign in (-1,1):
+                    center_u = sign*ROPE_TWIST_RADIUS_MM*math.cos(phase)
+                    center_h = sign*ROPE_TWIST_RADIUS_MM*math.sin(phase)
+                    radicand = ROPE_STRAND_RADIUS_MM**2-(across-center_u)**2
+                    if radicand > 0:
+                        height = max(height, center_h+math.sqrt(radicand))
+                relief.append(height)
+        traveled += length
+    stride = cross_steps+1
+    stations = len(points)//stride
+    for i in range(stations):
+        nxt = (i+1)%stations
+        for j in range(cross_steps):
+            a,b,c,d = i*stride+j,nxt*stride+j,nxt*stride+j+1,i*stride+j+1
+            faces.extend(((a,b,c),(a,c,d)))
+    vertices, triangles = extrude(points, faces, THICKNESS_MM,
+                                  lambda u,v,t: (u,THICKNESS_MM-t,v))
+    count = len(points)
+    for i,value in enumerate(relief):
+        x,y,z = vertices[count+i]
+        vertices[count+i] = (x,y-value,z)
+    return vertices, triangles
+
+
 def build():
     dimensions = (WIDTH_MM, HEIGHT_MM, THICKNESS_MM, FRAME_MM, RAISED_MM,
-                  FOOT_WIDTH_MM, FOOT_DEPTH_MM, FOOT_HEIGHT_MM)
+                  FOOT_WIDTH_MM, FOOT_DEPTH_MM, FOOT_HEIGHT_MM, ROPE_STRAND_RADIUS_MM,
+                  ROPE_TWIST_RADIUS_MM, ROPE_PITCH_MM)
     if not all(math.isfinite(v) and v > 0 for v in dimensions):
         raise ValueError('Dimensions must be finite positive millimeters.')
     if FRAME_MM * 2 >= min(WIDTH_MM, HEIGHT_MM):
         raise ValueError('Frame is too wide.')
+    if not 0 <= LEAN_DEGREES <= 20:
+        raise ValueError('Lean must be between 0 and 20 degrees.')
+    if ROPE_STRAND_RADIUS_MM+ROPE_TWIST_RADIUS_MM >= FRAME_MM/2:
+        raise ValueError('Rope must fit inside the frame width.')
     if len(FOOT_CENTERS_MM) != 2 or FOOT_HEIGHT_MM > HEIGHT_MM:
         raise ValueError('Exactly two supports must fit the plaque height.')
     if any(abs(x) + FOOT_WIDTH_MM/2 >= WIDTH_MM/2 for x in FOOT_CENTERS_MM):
@@ -113,24 +183,27 @@ def build():
     w, h, f, d = WIDTH_MM/2, HEIGHT_MM, FRAME_MM, THICKNESS_MM
     # (u,v,height) -> (u,-height,v) is a proper rotation. Extrude toward viewer.
     panel_map = lambda u, v, t: (u, d-t, v)
-    brown = extrude(*rect(-w+f, f, w-f, h-f), d, panel_map)
-    outer = [(-w, 0), (w, 0), (w, h), (-w, h)]
-    inner = [(-w+f, f), (w-f, f), (w-f, h-f), (-w+f, h-f)]
-    ring_faces = []
-    for i in range(4):
-        j = (i+1) % 4
-        ring_faces.extend(((i, j, j+4), (i, j+4, i+4)))
-    frame = extrude(outer+inner, ring_faces, d, panel_map)
-    parts = [('Plaque - Brown', 'Brown', brown), ('Frame - Black', 'Black', frame)]
-    for label, x in zip(('Left', 'Right'), FOOT_CENTERS_MM):
-        # A YZ triangle extruded along X, with its entire front edge on the back.
-        triangle = [(d, 0), (d+FOOT_DEPTH_MM, 0), (d, FOOT_HEIGHT_MM)]
-        foot = extrude(triangle, [(0, 1, 2)], FOOT_WIDTH_MM,
-                       lambda u, v, t, x=x: (x-FOOT_WIDTH_MM/2+t, u, v))
-        parts.append((label+' support - Black', 'Black', foot))
+    panel = extrude(*rect(-w+f, f, w-f, h-f), d, panel_map)
+    parts = [('Plaque - Black', 'Black', panel),
+             ('Twisted rope frame - Brown', 'Brown', rope_frame())]
     writing = extrude(data['vertices'], data['faces'], RAISED_MM,
                       lambda u, v, t: (u, -t, v))
     parts.append(('Writing - White', 'White', writing))
+    parts = [(name,color,([lean(p) for p in mesh[0]],mesh[1]))
+             for name,color,mesh in parts]
+    angle = math.radians(LEAN_DEGREES)
+    rear_bottom = d*math.cos(angle)
+    for label, x in zip(('Left', 'Right'), FOOT_CENTERS_MM):
+        # A slanted front edge meets the tilted back; the foot stays on Z=0.
+        triangle = [(rear_bottom,0), (rear_bottom+FOOT_DEPTH_MM,0),
+                    (rear_bottom+FOOT_HEIGHT_MM*math.sin(angle),
+                     FOOT_HEIGHT_MM*math.cos(angle))]
+        foot = extrude(triangle, [(0, 1, 2)], FOOT_WIDTH_MM,
+                       lambda u, v, t, x=x: (x-FOOT_WIDTH_MM/2+t, u, v))
+        parts.append((label+' support - Black', 'Black', foot))
+    LOGGER.info('Design: black panel, brown twisted-rope frame, white cursive; '
+                'backward lean=%s degrees; rope radius=%s, orbit=%s, pitch~%s mm',
+                LEAN_DEGREES,ROPE_STRAND_RADIUS_MM,ROPE_TWIST_RADIUS_MM,ROPE_PITCH_MM)
     return parts, data
 
 
@@ -221,22 +294,18 @@ def write_preview(data):
     svg = ['<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="820" viewBox="-12 -12 224 154">',
            '<rect x="-12" y="-12" width="224" height="154" fill="#ebe8e2"/>',
            '<g transform="translate(0 100) scale(1 -1)">',
-           '<rect width="200" height="100" fill="'+COLORS['Black'][:7]+'"/>',
-           '<rect x="4" y="4" width="192" height="92" fill="'+COLORS['Brown'][:7]+'"/>']
+           f'<rect width="{w}" height="{h}" fill="'+COLORS['Brown'][:7]+'"/>',
+           f'<rect x="{f}" y="{f}" width="{w-2*f}" height="{h-2*f}" fill="'+COLORS['Black'][:7]+'"/>']
     for line in data['outlines']:
         path = ' '.join('M '+' L '.join(f'{x+w/2:.5f},{y:.5f}' for x,y in ring)+' Z'
                         for ring in line['rings'])
         svg.append('<path fill="white" fill-rule="evenodd" d="'+path+'"><title>'
                    +html.escape(line['text'])+'</title></path>')
     svg += ['</g>', '<g font-family="sans-serif" fill="#333" font-size="3.6">',
-            '<text x="0" y="108">Front: 200 × 100 mm · 4 mm black frame · raised cursive lettering</text>',
-            '<text x="0" y="117">Panel: 10 mm thick · lettering: +1.2 mm</text>',
-            '<text x="0" y="125">Two rear triangles: 8 mm wide × 40 mm deep × 65 mm tall</text>',
-            '<text x="0" y="133">Side view →</text></g>',
-            '<g transform="translate(172 137) scale(.22 -.22)">',
-            '<rect x="0" y="0" width="10" height="100" fill="#80451f"/>',
-            '<path d="M 10,0 L 50,0 L 10,65 Z" fill="#101010"/>',
-            '<path d="M -1.2,7 L -1.2,90" stroke="white" stroke-width="1.2"/>',
+            f'<text x="0" y="108">Face: {w:g} × {h:g} mm · brown rope frame (see 3D preview)</text>',
+            f'<text x="0" y="117">Black panel: {THICKNESS_MM:g} mm · white lettering: +{RAISED_MM:g} mm</text>',
+            f'<text x="0" y="125">Backward lean: {LEAN_DEGREES:g}° · two black triangular supports</text>',
+            '<text x="0" y="133">Snell Roundhand Bold · larger saying, smaller name and date</text>',
             '</g></svg>']
     (HERE / 'preview.svg').write_text('\n'.join(svg), encoding='utf-8')
 
@@ -247,18 +316,24 @@ def generate():
     total_volume = sum(r['volume_mm3'] for r in reports.values())
     com = [sum(r['volume_mm3']*r['center_of_mass_mm'][i] for r in reports.values())/total_volume
            for i in range(3)]
-    # Conservative interior rectangle of the table-contact polygon.
+    rear_bottom = THICKNESS_MM*math.cos(math.radians(LEAN_DEGREES))
     if not (min(FOOT_CENTERS_MM) < com[0] < max(FOOT_CENTERS_MM)
-            and 0 < com[1] < THICKNESS_MM+FOOT_DEPTH_MM):
+            and rear_bottom < com[1] < rear_bottom+FOOT_DEPTH_MM):
         raise ValueError('Center of mass is outside the support footprint.')
+    all_points = [p for _,_,mesh in parts for p in mesh[0]]
+    overall = [max(p[i] for p in all_points)-min(p[i] for p in all_points) for i in range(3)]
     reports['assembly'] = {'center_of_mass_mm_equal_density': com,
         'static_stability_check': 'inside support footprint (equal-density solid model)',
         'panel_dimensions_mm': [WIDTH_MM, HEIGHT_MM, THICKNESS_MM],
-        'overall_xyz_mm': [WIDTH_MM, THICKNESS_MM+FOOT_DEPTH_MM+RAISED_MM, HEIGHT_MM],
+        'overall_xyz_mm': overall, 'backward_lean_degrees': LEAN_DEGREES,
         'text': [line[0] for line in LINES], 'font': FONT_NAME,
         'fusion_execution_verified': False, 'physical_print_verified': False}
     output = HERE / 'exports'
     output.mkdir(exist_ok=True)
+    (output/'independent-validation.json').unlink(missing_ok=True)
+    # Remove only earlier generated parts, so changed names cannot leave stale STLs.
+    for old in output.glob('[0-9][0-9]_*.stl'):
+        old.unlink()
     for index, (name, color, mesh) in enumerate(parts, 1):
         path = output / (f'{index:02d}_'+name.replace(' ', '_')+'.stl')
         write_stl(path, mesh)
@@ -327,9 +402,9 @@ def run(context):
         app.activeViewport.refresh()
         LOGGER.info('FUSION SUCCESS: five mesh bodies; save the new design manually.')
         app.userInterface.messageBox(
-            'Created MyriSaying: 200 × 100 × 10 mm panel, 1.2 mm raised cursive, '
-            'and two rear triangular supports.\n\n'
-            'Brown plaque, black frame/supports, white lettering.\n'
+            'Created MyriSaying: 200 × 100 × 3 mm panel, 1.2 mm raised cursive, '
+            '10 degree backward lean, and two rear triangular supports.\n\n'
+            'Black plaque/supports, brown twisted-rope frame, white lettering.\n'
             'Save the new Fusion design.\n\n3MF: '+str(HERE/'exports'/'MyriSaying.3mf')+
             '\nLog: '+str(LOG_PATH), 'MyriSaying')
     except Exception:

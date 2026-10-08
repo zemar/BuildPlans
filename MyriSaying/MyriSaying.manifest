@@ -2,7 +2,7 @@
   "autodeskProduct": "Fusion360",
   "type": "script",
   "author": "",
-  "description": {"": "Generate a 200 x 100 x 10 mm brown plaque with raised white cursive, black frame and two black triangular rear supports."},
+  "description": {"": "Generate a black 200 x 100 x 3 mm plaque with a brown twisted-rope frame, white cursive and two rear supports for a 10-degree backward lean."},
   "version": "1.0.0",
   "runOnStartup": false,
   "supportedOS": "windows|mac"

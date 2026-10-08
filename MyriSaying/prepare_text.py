@@ -1,7 +1,7 @@
 """Rebuild the bundled, shaped cursive outlines and front PNG with Python.
 
 Requires requirements.txt. The original font file is never copied into the project.
-Usage: python prepare_text.py [--font '/path/to/Brush Script.ttf']
+Usage: python prepare_text.py [--font '/path/to/SnellRoundhand.ttc' --font-index 1]
 """
 import argparse
 import json
@@ -89,12 +89,12 @@ def shaped_line(text, font, hbfont):
     return unary_union(shapes)
 
 
-def prepare(font_path):
-    font = TTFont(font_path)
-    actual_name = font['name'].getDebugName(1)
+def prepare(font_path, font_index):
+    font = TTFont(font_path, fontNumber=font_index)
+    actual_name = font['name'].getDebugName(4)
     if actual_name != model.FONT_NAME:
         raise ValueError(f'Expected {model.FONT_NAME}, found {actual_name}')
-    hbfont = hb.Font(hb.Face(font_path.read_bytes()))
+    hbfont = hb.Font(hb.Face(font_path.read_bytes(), font_index))
     hbfont.scale = (font['head'].unitsPerEm,)*2
     vertices, faces, outlines, rendered = [], [], [], []
     max_width = model.WIDTH_MM-2*model.FRAME_MM-12
@@ -103,8 +103,9 @@ def prepare(font_path):
         x0,y0,x1,y1 = shape.bounds
         scale = min(height/(y1-y0), max_width/(x1-x0))
         shape = affinity.scale(shape, xfact=scale, yfact=scale, origin=(0,0))
-        # Add 0.08 mm on each side of thin font strokes to aid reproduction.
-        shape = shape.buffer(0.08, quad_segs=3).simplify(0.008, preserve_topology=True)
+        # Give the small name/date stronger hairlines without changing the font.
+        expansion = 0.16 if height <= 7 else 0.08
+        shape = shape.buffer(expansion, quad_segs=3).simplify(0.008, preserve_topology=True)
         x0,y0,x1,y1 = shape.bounds
         if x1-x0 > max_width:
             scale = max_width/(x1-x0)
@@ -143,7 +144,7 @@ def prepare(font_path):
         model.LOGGER.info('TEXT %r; bounds mm=%s; connected outlines=%d',
                           text, shape.bounds, len(polygons(shape)))
     data = {'spec':model.text_spec(), 'font':actual_name,
-            'stroke_expansion_mm':0.08, 'outline_simplification_mm':0.008,
+            'stroke_expansion_mm':{'saying':0.08,'name_and_date':0.16}, 'outline_simplification_mm':0.008,
             'vertices':vertices, 'faces':faces, 'outlines':outlines}
     folder = model.HERE/'assets'
     folder.mkdir(exist_ok=True)
@@ -153,10 +154,10 @@ def prepare(font_path):
     image = Image.new('RGB', (int(model.WIDTH_MM*scale)+2*margin,
                               int(model.HEIGHT_MM*scale)+2*margin), '#e9e5de')
     draw = ImageDraw.Draw(image)
-    draw.rectangle((margin,margin,image.width-margin,image.height-margin), fill='#101010')
+    draw.rectangle((margin,margin,image.width-margin,image.height-margin), fill=model.COLORS['Brown'][:7])
     inset = model.FRAME_MM*scale
     draw.rectangle((margin+inset,margin+inset,image.width-margin-inset,image.height-margin-inset),
-                   fill=model.COLORS['Brown'][:7])
+                   fill=model.COLORS['Black'][:7])
     def screen(ring):
         return [(margin+(x+model.WIDTH_MM/2)*scale,
                  margin+(model.HEIGHT_MM-y)*scale) for x,y in ring.coords]
@@ -175,11 +176,12 @@ def prepare(font_path):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--font', type=Path,
-                        default=Path('/System/Library/Fonts/Supplemental/Brush Script.ttf'))
+                        default=Path('/System/Library/Fonts/Supplemental/SnellRoundhand.ttc'))
+    parser.add_argument('--font-index', type=int, default=1)
     args = parser.parse_args()
     model.start_log()
     try:
-        prepare(args.font)
+        prepare(args.font, args.font_index)
         model.generate()
     except Exception:
         model.LOGGER.exception('Font preparation failed')

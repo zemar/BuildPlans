@@ -1,8 +1,8 @@
 # MyriSaying
 
-Python-generated freestanding plaque, **200 mm wide × 100 mm tall × 10 mm body thickness**, with a brown center, a 4 mm black border, white raised cursive lettering, and exactly two black triangular rear supports. Lettering projects another **1.2 mm** beyond the front face. The complete assembly is **51.2 mm deep**, including the rear supports and raised letters.
+Python-generated freestanding plaque with a **200 × 100 mm face and a 3 mm panel**, a black background, a brown twisted-rope border, white raised cursive, and two black triangular rear supports. The plaque leans backward **10°**; the support bottoms remain flat on the table.
 
-The inscription is reproduced verbatim, with line breaks for layout:
+The saying is larger than the name and date, using **Snell Roundhand Bold** for clearer cursive. All five lines are raised **1.2 mm**:
 
 > The super power that you'll
 > never lose is being the
@@ -11,58 +11,60 @@ The inscription is reproduced verbatim, with line breaks for layout:
 > Myriam Howard
 > March 19, 2023
 
-All inscription lines use **Brush Script MT**, including the name and date. Outlines are shaped from the installed cursive font, with counters preserved and a small 0.08 mm stroke expansion. The actual font file is not bundled; the prepared geometry is included in `assets/lettering.json`, so the main script does not require an installed font or third-party Python packages.
+## Construction
 
-## Files and generation
+- **Panel:** 3 mm thick, reduced from 10 mm. This is a practical thin starting point for the 200 mm span; the frame and supports reinforce it. Minimum reliable thickness depends on material and print settings, and has not been physically tested.
+- **Frame:** 6 mm wide, brown throughout. Two twisting strand profiles form a continuous raised rope pattern on a solid frame backing. The strands are fused into one watertight mesh, with no intersecting strand shells. The rope projects up to about 2.5 mm beyond the face, for about **5.5 mm maximum frame thickness**.
+- **Lettering:** white, raised 1.2 mm. Nominal saying outline heights are 14/14/16 mm; name 6.5 mm; date 5 mm. Small strokes are expanded slightly for reproduction while retaining the cursive style.
+- **Supports:** exactly two black triangular feet, 8 mm wide and 40 mm deep, centered at X = ±65 mm. They attach along 65 mm of the tilted back. Their vertical rise is about 64 mm.
+- **Standing size:** approximately **200 × 44.93 × 99.00 mm** in X/Y/Z. The face itself remains 200 × 100 mm; the standing height changes with the lean. X is right, +Y rearward, +Z upward.
 
-- `MyriSaying.py`: main generator and Autodesk Fusion entry point.
-- `MyriSaying.log`: append-only UTC log sidecar; logs inputs, font asset checksum, geometry validation, outputs, Fusion import stages, and full error tracebacks. Each entry flushes immediately.
-- `exports/MyriSaying.3mf`: assembled model with five named parts and brown/black/white material colors.
-- `exports/*.stl`: five aligned geometry-only parts, in millimeters.
-- `preview.png`: front proof from the same outlines used for the raised geometry.
-- `preview-3d.png`, `preview-rear.png`: rendered views of the actual mesh geometry.
-- `preview.svg`: front outline proof and side elevation.
-- `exports/validation.json`, `exports/independent-validation.json`: dimension and mesh checks.
+The panel, frame, lettering, and supports meet at shared surfaces without overlapping material volumes. The intended result is one assembled multicolor print.
 
-Generate the model and append the log using ordinary Python:
+## Generate or open in Fusion
+
+Run the main script with ordinary Python; no third-party packages are required:
 
 ```sh
 python3 MyriSaying/MyriSaying.py
 ```
 
-The script regenerates the STL parts, 3MF, SVG, and primary validation report. Keep the `assets` folder beside it. No external Python packages are needed for this command.
+It regenerates the 3MF, five aligned STLs, SVG layout proof, primary validation report, and appends diagnostics to **`MyriSaying.log`**. Keep the bundled `assets/lettering.json` beside the script. The font geometry is included; the actual font file is not redistributed.
 
-## Run in Autodesk Fusion
+In Autodesk Fusion, open **Utilities → Scripts and Add-Ins → Scripts**, add the `MyriSaying` folder, select **MyriSaying**, and click **Run**. The same script regenerates the exports and opens a new unsaved design containing five colored mesh bodies. Save it from Fusion. These are mesh bodies, not sketch/extrusion features.
 
-Open **Utilities → Scripts and Add-Ins → Scripts**, add this `MyriSaying` folder, select **MyriSaying**, and click **Run**. The script regenerates the exports, opens a new unsaved design, and imports five named mesh bodies with the requested appearances. Save the design in Fusion. These are mesh bodies, not editable sketch/extrusion features.
+Fusion import uses Autodesk's [MeshBodies.add API](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/fusion_MeshBodies_add.htm) with explicit millimeter units. If Fusion overrides the colors, disable **Preferences → Material → Apply a different appearance**, following Autodesk's [mesh display instructions](https://help.autodesk.com/cloudhelp/ENU/Fusion-Mesh/files/MESH-INSERT-MESH.htm).
 
-The import uses Autodesk's [MeshBodies.add API](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/fusion_MeshBodies_add.htm) with explicit millimeter units and a direct design. If Fusion overrides the colors, uncheck **Preferences → Material → Apply a different appearance**, as described in Autodesk's [mesh display instructions](https://help.autodesk.com/cloudhelp/ENU/Fusion-Mesh/files/MESH-INSERT-MESH.htm).
+## Outputs
 
-## Construction and printing
+- `exports/MyriSaying.3mf`: assembled model with named black, brown, and white parts.
+- `exports/*.stl`: five aligned geometry-only parts, in millimeters.
+- `preview.png`, `preview-3d.png`, `preview-rear.png`: front, oblique, and rear views rendered from the actual meshes.
+- `preview.svg`: flat typography/layout proof; the rope relief is shown in the PNG renders.
+- `exports/validation.json`: geometry and static standing-balance calculations.
+- `exports/independent-validation.json`: independent checks of exported files, including checksums.
+- `MyriSaying.log`: append-only UTC sidecar with dimensions, font checksum, color/lean settings, mesh checks, output paths, Fusion import stages, and full failure tracebacks. Records flush immediately.
 
-The black frame surrounds the brown panel through its full 10 mm thickness. Each triangular support is **8 mm wide × 40 mm rearward projection × 65 mm tall**, centered 65 mm to either side of the plaque center. Both supports and the bottom border rest on Z = 0. The plaque stands vertically. X is left/right, +Y points backward, +Z points up; the front surface is at Y = 0.
+The repository's existing ignore rules exclude `*.log` and `exports` from Git. Those outputs are present locally in this folder.
 
-The brown panel, frame, supports, and letters meet at shared surfaces without overlapping material volumes. They are intended to print as one assembled multicolor object. Open the 3MF with the parts kept together; assign brown to the panel, black to the frame and both supports, and white to the writing. Display colors do not select physical filament reels. If importing STLs, load all five together as parts of one object and preserve their relative positions. Do not auto-arrange the individual parts.
+## Printing
 
-The 3MF is a geometry/material assembly, without a printer profile or generated toolpaths. Check orientation, supports for the raised front lettering, and fine cursive strokes in the slicer's layer preview before printing.
+Keep the five parts together as one multipart object. Assign **black** to the panel and both feet, **brown** to the rope frame, and **white** to the writing. If using STL, import all five simultaneously as parts and preserve their relative positions. Do not arrange individual parts independently.
 
-## Editing and optional preview rebuilding
+The 3MF stores geometry and material colors, without a printer profile or toolpaths. For a solid 3 mm panel, use 100% infill or enough solid layers/walls to fill that section. Review the lean, raised lettering, and rope overhangs in the slicer's support and layer preview. Actual slicing and a physical print have not been verified.
 
-Dimensions and text layout are at the top of `MyriSaying.py`. If you change the inscription, font, width, height, or border, regenerate the font outline asset. Changing thickness, relief, or support dimensions only requires the main script.
+## Editing and optional checks
+
+Edit dimensions, lean angle, rope settings, or lettering layout at the top of `MyriSaying.py`. Changes to thickness, relief, lean, rope parameters, or support dimensions only need the main script. Changes to text, font, face width/height, or border width require rebuilding the text asset:
 
 ```sh
 python3 -m venv /tmp/myrisaying-venv
 /tmp/myrisaying-venv/bin/python -m pip install -r MyriSaying/requirements.txt
 /tmp/myrisaying-venv/bin/python MyriSaying/prepare_text.py
 /tmp/myrisaying-venv/bin/python MyriSaying/render_preview.py
+/tmp/myrisaying-venv/bin/python MyriSaying/validate_exports.py
 ```
 
-`prepare_text.py` defaults to the macOS Brush Script font. On another system, supply `--font '/path/to/Brush Script.ttf'`. A mismatched font is rejected instead of silently substituting a non-cursive font. Font paths are converted with [fontTools](https://fonttools.readthedocs.io/en/latest/pens/basePen.html); polygon triangulation uses [trimesh](https://trimesh.org/trimesh.creation.html) and Earcut.
+The font preparation defaults to macOS `SnellRoundhand.ttc`, font index 1 (Bold). On another system use `--font '/path/to/SnellRoundhand.ttc' --font-index 1`; the full font name must match `FONT_NAME`. Outlines use [fontTools](https://fonttools.readthedocs.io/en/latest/pens/basePen.html), HarfBuzz shaping, and [trimesh](https://trimesh.org/trimesh.creation.html)/Earcut triangulation. The preview renderer uses NumPy and Pillow and does not need Blender.
 
-## Verification
-
-Local checks passed for the exact panel dimensions, text/frame clearance, line separation, positive solid volumes, watertight meshes, consistent winding, and nondegenerate triangles. Independent checks read the exported STLs and 3MF geometry back from disk. Bambu Studio's CLI reopened the 3MF as manifold geometry measuring **200 × 51.2 × 100 mm** in XYZ, with **35 closed shells** across five material parts (the cursive lettering contains 31 connected pieces).
-
-The equal-density solid model's center of mass is inside the support footprint. This is a static geometry check, not a physical stability test. Fusion execution, actual slicing, and a physical print have not been verified here.
-
-All project files stay in this folder. The repository's existing ignore rules exclude `*.log` and `exports` from Git; those files are generated locally and are present on disk.
+Checks cover face dimensions and true panel thickness after undoing the lean, flat support bottoms, exact colors, text clearance and line separation, closed shells, positive volumes, consistent winding, and nondegenerate triangles. The equal-density model's center of mass falls inside its support footprint. Fusion execution and physical stability have not been tested here.
