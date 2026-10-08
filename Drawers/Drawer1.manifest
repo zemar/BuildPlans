@@ -3,9 +3,9 @@
   "type": "script",
   "author": "",
   "description": {
-    "": "Create four brown drawer bins as six flat-printing pieces, with snap-together long bins and optional joint fit-test pieces."
+    "": "Create four independent brown drawer bins and export flat, unrotated meshes for cutting in Bambu Studio."
   },
-  "version": "3.0.0",
+  "version": "4.0.0",
   "runOnStartup": false,
   "supportedOS": "windows|mac"
 }
