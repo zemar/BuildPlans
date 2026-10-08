@@ -2,7 +2,9 @@
   "autodeskProduct": "Fusion360",
   "type": "script",
   "author": "",
-  "description": {"": "One black PETG shower basket with glass-panel hooks. All dimensions in mm."},
+  "description": {
+    "": "One black PLA shower basket with rounded glass-panel hooks and a four-color panda/camel front inlay. All dimensions in mm."
+  },
   "version": "1.0.0",
   "supportedOS": "windows|mac"
 }
