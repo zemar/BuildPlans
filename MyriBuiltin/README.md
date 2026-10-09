@@ -1,81 +1,66 @@
-# Myri Built-in MkI — VS Code and SketchUp
+# Myri Built-in — Fusion
 
-This project generates the measured bedroom built-in as native SketchUp
-components. Every panel, shelf, drawer front, bed part and back panel is a
-separate component.
+Version **3.0.0** builds the **MkIII** bedroom built-in design in Autodesk Fusion.
+The model contains 147 individual part components grouped into 17 assemblies.
+Each plywood panel is a separate component containing one solid body, with its
+applicable dado grooves cut into the geometry.
 
-## Start live reload on macOS
+## Run in Fusion
 
-1. Put the `MyriBuiltin` folder somewhere permanent on your Mac.
-2. Open that folder in VS Code.
-3. Open SketchUp and choose **Window → Ruby Console**.
-4. Enter the following command, replacing the path with the folder location:
+1. Keep this project in a folder named `MyriBuiltin`.
+2. Keep `MyriBuiltin.py`, `MyriBuiltin.manifest`, and `textures/` together in that folder.
+3. In Fusion's Design workspace, open **Utilities → Add-Ins → Scripts and Add-Ins**.
+4. Use **+** to add an existing script and select the `MyriBuiltin` folder.
+5. Select **MyriBuiltin** and click **Run**.
+6. Save the resulting design in Fusion when the build completes.
 
-   ```ruby
-   load '/Users/your-name/Documents/MyriBuiltin/MyriBuiltin_MkI_LiveReload.rb'
-   ```
+Every run creates a **new, unsaved document**. It does not update an existing
+model. The design uses direct modeling, without a parametric timeline. Run the
+script inside Fusion; its `adsk` modules are not available in ordinary Python.
 
-5. Edit and save `MyriBuiltin_MkI.rb` in VS Code.
+## Files
 
-SketchUp checks the file approximately every 0.75 seconds. Each save removes
-the previously generated `Myri Built-in MkI` group and rebuilds it without changing
-the current camera view.
+- `MyriBuiltin.py`: Fusion entry point, embedded design data, geometry, and appearances.
+- `MyriBuiltin.manifest`: Fusion script registration and version information.
+- `textures/`: Original walnut and purpleheart images used by the script.
+- `MyriBuiltin.log`: Execution details appended beside the script on each run.
+- `SketchUp/`: Earlier Ruby models and live-reload scripts, separate from the Fusion entry point.
+- [ASSEMBLIES.md](ASSEMBLIES.md): Earlier assembly notes; consult the current script for exact parts and dimensions.
 
-## Stop live reload
+## Design and materials
 
-Enter this in the SketchUp Ruby Console:
+The embedded `DATA` in `MyriBuiltin.py` defines assembly membership, part names,
+positions, dimensions, material keys, grain direction, dados, and tapered legs.
+Dimensions are in inches and are converted to centimeters for Fusion's geometry
+API. X runs left to right, negative Y projects into the room, and Z points up.
+Changes to the SketchUp Ruby files do not automatically update this snapshot.
 
-```ruby
-MyriBuiltin_MkILiveReload.stop
-```
+Walnut hardwood, walnut plywood, and purpleheart use these original images:
 
-## Editing the design
+- `textures/walnut_solid.png`
+- `textures/walnut_plywood.png`
+- `textures/purpleheart_solid.png`
 
-- Major dimensions are collected in the `layout` method near the top.
-- `assemblies` defines the shop modules; each gets its own named Outliner group.
-- See [ASSEMBLIES.md](ASSEMBLIES.md) for module sizes and installation order.
-- All dimensions and origins are expressed in inches.
-- The front elevation is desk-left, bed-center and nightstand-right.
-- Upper boxes stop at 95.5 inches; site-fitted trim closes the ceiling gap.
-- The nightstand is 12 inches deep, flush with the shelving above.
+Other materials, including maple, Baltic birch plywood, the mattress, and LED
+strips, use the source palette colors. Appearances are visual assignments, not
+physical material definitions for mass or structural analysis. Plywood layers,
+the photo figure, and simulated light washes are not modeled. Texture mapping
+uses each part's grain direction; the image textures do not simulate true end grain.
 
-If a saved edit contains a Ruby error, the previous successful geometry remains
-and the error is printed in SketchUp's Ruby Console. Correct the code and save
-again to rebuild.
+Set `SHOW_MATTRESS` or `SHOW_LIGHTING` near the top of the script to control the
+initial visibility of those components. They remain part of the generated design.
 
-## Walnut materials and grain
+## Troubleshooting
 
-The model uses `Myri Walnut Solid` and `Myri Walnut Plywood`, loaded from
-`walnut_solid.png` and `walnut_plywood.png` beside the Ruby script.
-Solid walnut is assigned to the desk top, drawer fronts, bed rails
-and footboard. Other wood parts use walnut plywood. These are visualization
-assignments, not a construction specification.
+Check `MyriBuiltin.log` after running the script. Each run records the Fusion and
+Python versions, material setup, individual part data, geometry checks,
+appearance assignments, warnings, and full error tracebacks. Locate the latest
+`RUN START` entry to distinguish current errors from previous runs.
 
-In `wood_textures`, adjust `width` (image coverage in inches) to change grain
-scale. The image aspect ratio is preserved. Current widths are estimates because
-these photos have no physical scale. `tint: nil` keeps each image's original
-color; use an RGB array such as `tint: [107, 70, 45]` to colorize it.
-Missing images fall back to the palette color and print a console warning.
+A failed build can leave an incomplete new document. After correcting the issue,
+run the script again to build a fresh document. Missing required texture images
+stop appearance setup; keep the `textures` folder beside the running script.
+If you run a copied script, its log is written beside that copy.
 
-Textures are applied to component faces and positioned again on every rebuild.
-Grain follows the longest part dimension by default. Append `grain: :x`,
-`grain: :y`, or `grain: :z` to a `part(...)` call to override that direction.
-Image U is used for solid walnut and V for plywood; the natural diagonal grain
-in the solid walnut photograph remains visible. End faces reuse the same image;
-this setup does not simulate end grain or exposed plywood layers.
-
-Use SketchUp's Shaded with Textures face style to see the images. Save the Ruby
-file to rebuild after changing material settings. If you replace only a PNG,
-run `MyriBuiltin_MkILiveReload.reload_script` in the Ruby Console to refresh it.
-
-## Checking script changes
-
-Run `ruby test/model_test.rb` without launching SketchUp. The checks cover the
-current design's geometry/material snapshot, repeated regeneration, invalid
-parts, tapered legs and solid overlaps. Intentional design changes require
-updating the snapshot expectation after reviewing the new dimensions.
-
-`build` creates the assembly plan once and validates it before replacing the
-previous model. Drawer construction is shared by the desk and nightstand.
-Rendering remains inside SketchUp; these checks do not replace a visual check
-of textures and the generated model there.
+The script checks solid geometry and part volumes during execution. There is no
+separate test folder or test runner.

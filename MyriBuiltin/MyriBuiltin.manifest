@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "id": "eb340ef1-aa9f-44f1-8be4-1f1ebc7e007f",
+  "author": "",
+  "description": {
+    "": "Myri built-in MkIII prototype."
+  },
+  "version": "3.0.0",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "editEnabled": true
+}

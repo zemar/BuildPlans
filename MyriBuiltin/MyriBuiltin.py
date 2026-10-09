@@ -1,9 +1,10 @@
-"""Myri Built-in MkIII — standalone Fusion 360 script.
+"""Myri Built-in — standalone Fusion 360 script.
 
-In Fusion's Scripts and Add-Ins dialog, create a Python script named
-MyriBuiltin_MkIII, replace its .py contents with this file, then run it.
+In Fusion's Scripts and Add-Ins dialog, add this MyriBuiltin folder as an
+existing script, select MyriBuiltin, then Run. Keep MyriBuiltin.manifest
+and textures/ beside this file.
 Creates a NEW unsaved direct-modeling design on every run (no timeline).
-Snapshot of MyriBuiltin_MkIII.rb; no Ruby is required. Keep textures/ beside this file.
+Embedded design snapshot; no Ruby is required.
 Walnut and purpleheart use the original project images. Other materials use
 the source palette colors, matching the earlier successful render.
 Coordinates/dimensions are inches; Fusion API geometry uses centimeters.
@@ -11,7 +12,7 @@ X is right, negative Y projects into the room, Z is up.
 Material colors, wood textures, and metadata are included. Physical material
 properties, the photo figure, and simulated light washes are omitted.
 Birch plywood uses the source color; veneer layers are not modeled.
-Each run appends progress and errors to MyriBuiltin_MkIII.log beside this script.
+Each run appends progress and errors to MyriBuiltin.log beside this script.
 
 API references:
 https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/TemporaryBRepManager_Sample.htm
@@ -3002,10 +3003,10 @@ WOOD_SPECIES = {'walnut_solid', 'walnut_plywood', 'purpleheart_solid',
 
 def make_appearances(app, design):
     """Restore the image-based appearance setup from the successful render."""
-    logger = logging.getLogger('MyriBuiltin_MkIII')
+    logger = logging.getLogger('MyriBuiltin')
     result = {}
     for name, rgb in DATA['palette'].items():
-        appearance = design.appearances.add('MkIII ' + name)
+        appearance = design.appearances.add('MyriBuiltin ' + name)
         if not appearance:
             raise RuntimeError('Could not create appearance: ' + name)
         appearance.color = adsk.core.Color.create(*rgb, 255)
@@ -3055,7 +3056,7 @@ def orient_texture(body, part):
 
 def run(context):
     log_path = Path(__file__).resolve().with_suffix('.log')
-    logger = logging.getLogger('MyriBuiltin_MkIII')
+    logger = logging.getLogger('MyriBuiltin')
     logger.setLevel(logging.DEBUG)
     logger.propagate = False
     # Fusion can reload the script in the same Python process.
@@ -3083,7 +3084,7 @@ def run(context):
         logger.info('Fusion version=%s', getattr(app, 'version', 'unknown'))
         logger.info('Creating new document')
         doc = app.documents.add(adsk.core.DocumentTypes.FusionDesignDocumentType)
-        doc.name = 'MyriBuiltin_MkIII'
+        doc.name = 'MyriBuiltin'
         design = adsk.fusion.Design.cast(app.activeProduct)
         design.designType = adsk.fusion.DesignTypes.DirectDesignType
         root = design.rootComponent
@@ -3110,7 +3111,7 @@ def run(context):
             occurrence = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
             group = occurrence.component
             group.name = assembly['name']
-            group.attributes.add('MyriBuiltin_MkIII', 'shop_built', json.dumps(assembly['shop_built']))
+            group.attributes.add('MyriBuiltin', 'shop_built', json.dumps(assembly['shop_built']))
             for part in assembly['parts']:
                 current = part['name']
                 logger.info('Part %d START: %s | data=%s', count + 1, current, json.dumps(part, sort_keys=True))
@@ -3123,7 +3124,7 @@ def run(context):
                 body = make_body(component, part, manager)
                 logger.debug('Geometry OK: volume_cm3=%.9f expected_cm3=%.9f', body.volume, expected_volume(part))
                 for key, value in part.items():
-                    component.attributes.add('MyriBuiltin_MkIII', key, json.dumps(value))
+                    component.attributes.add('MyriBuiltin', key, json.dumps(value))
                 appearance = appearances[part['material']]
                 if appearance:
                     body.appearance = appearance
@@ -3153,7 +3154,7 @@ def run(context):
     except Exception:
         logger.exception('BUILD FAILED at %s after %d completed parts', current, count)
         if ui:
-            ui.messageBox('MkIII build failed at {}.\nThe new document may be incomplete.\nLog: {}\n\n{}'.format(
+            ui.messageBox('MyriBuiltin build failed at {}.\nThe new document may be incomplete.\nLog: {}\n\n{}'.format(
                 current, log_path, traceback.format_exc()))
     finally:
         logger.info('=== RUN END: %.2f seconds; %d completed parts ===', time.monotonic() - started, count)
