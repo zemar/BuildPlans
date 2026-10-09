@@ -1,18 +1,14 @@
 """Run in Autodesk Fusion, Utilities > Scripts and Add-Ins > Scripts.
 
-Creates four complete drawer bins in a NEW document, then exports four
-millimeter STL files and a Fusion archive beside this script in exports/<run>.
-Cut the long-bin meshes in Bambu Studio before printing.
+Creates four complete drawer bins in a NEW Fusion document.
+Save and export the model manually in Fusion; cut the long bins in Bambu Studio.
 All design inputs are mm; Fusion's internal geometry units are cm.
 Brown appearance is cosmetic: select your filament in Bambu Studio.
 The drawer dimensions are assumed to be clear INTERNAL dimensions.
 """
 
-from datetime import datetime
 from pathlib import Path
 import logging
-import math
-import struct
 import traceback
 
 import adsk.core
@@ -64,41 +60,6 @@ def layout():
     for name, x, y, length in bins:
         assert x + BIN_WIDTH <= width + 1e-8 and y + length <= depth + 1e-8
     return width, depth, bins
-
-
-def normalize_binary_stl(path):
-    """Place the complete upright mesh at the origin and report its mm dimensions.
-
-    Whole bins may exceed the printer envelope: cutting happens in Bambu Studio.
-    """
-    data = bytearray(path.read_bytes())
-    if len(data) < 84:
-        raise RuntimeError('Expected a binary STL header: ' + str(path))
-    count = struct.unpack_from('<I', data, 80)[0]
-    if len(data) != 84 + 50 * count or not count:
-        raise RuntimeError('Expected a nonempty binary STL: ' + str(path))
-    minimum = [float('inf')] * 3
-    maximum = [-float('inf')] * 3
-    for i in range(count):
-        offset = 84 + i * 50
-        values = list(struct.unpack_from('<12fH', data, offset))
-        for j in (3, 6, 9):
-            for axis in range(3):
-                if not math.isfinite(values[j + axis]):
-                    raise RuntimeError('Non-finite STL vertex: ' + str(path))
-                minimum[axis] = min(minimum[axis], values[j + axis])
-                maximum[axis] = max(maximum[axis], values[j + axis])
-    for i in range(count):
-        for j in (3, 6, 9):
-            offset = 84 + i * 50 + j * 4
-            vertex = struct.unpack_from('<3f', data, offset)
-            struct.pack_into('<3f', data, offset,
-                             *(vertex[k] - minimum[k] for k in range(3)))
-    size = tuple(maximum[k] - minimum[k] for k in range(3))
-    if any(dimension <= 0 for dimension in size):
-        raise RuntimeError('STL has no solid extent: ' + str(size))
-    path.write_bytes(data)
-    return size
 
 
 def point(x, y):
@@ -177,9 +138,6 @@ def run(context):
             warnings.append('Brown appearance not applied: ' + str(exc))
             logger.warning('Brown appearance unavailable', exc_info=True)
 
-        output = Path(__file__).resolve().parent / 'exports' / datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-        output.mkdir(parents=True, exist_ok=False)
-        logger.info('Export directory: %s', output)
         for name, x, y, length in bins:
             logger.info('Building %s: width=%s depth=%s height=%s',
                         name, BIN_WIDTH, length, HEIGHT)
@@ -219,36 +177,17 @@ def run(context):
             body.name = component.name + '_Brown'
             if appearance:
                 body.appearance = appearance
-            # Export the native body, not its assembly-context proxy.
-            options = design.exportManager.createSTLExportOptions(
-                body, str(output / (component.name + '.stl')))
-            options.sendToPrintUtility = False
-            options.isBinaryFormat = True
-            options.unitType = adsk.fusion.DistanceUnits.MillimeterDistanceUnits
-            options.meshRefinement = adsk.fusion.MeshRefinementSettings.MeshRefinementHigh
-            if not design.exportManager.execute(options):
-                raise RuntimeError('STL export failed: ' + name)
-            stl_path = output / (component.name + '.stl')
-            size = normalize_binary_stl(stl_path)
-            logger.info('Complete bin STL exported: %s; bounds_mm=%s; cut before printing=%s',
-                        stl_path, size, name.startswith('Long_'))
-
-        archive = design.exportManager.createFusionArchiveExportOptions(
-            str(output / 'Drawer1.f3d'), root)
-        if not design.exportManager.execute(archive):
-            raise RuntimeError('Fusion archive export failed.')
-        logger.info('Fusion archive exported: %s', output / 'Drawer1.f3d')
         app.activeViewport.fit()
         message = (
             'Four complete brown bins created.\n\n'
             'Clear lengths (mm): left long %.2f, left short %.2f;\n'
             'right long %.2f, right short %.2f. Clear width %.3f.\n\n'
-            'Four STL files and Fusion archive exported to:\n%s\n\n'
+            'Save the design in Fusion. Export the desired bins using Save As Mesh.\n'
             'Import at 100%% scale in Bambu Studio.\n'
             'Cut the long bins in Bambu Studio before printing.\n'
             'Short bins print flat; choose print settings after cutting the long bins.'
         ) % (LONG_BAY_LENGTH, SHORT_BAY_LENGTH, RIGHT_LONG_BAY_LENGTH,
-             RIGHT_SHORT_BAY_LENGTH, LONG_BAY_WIDTH, output)
+             RIGHT_SHORT_BAY_LENGTH, LONG_BAY_WIDTH)
         if warnings:
             message += '\n\n' + '\n'.join(warnings)
         message += '\n\nRun log: ' + str(log_path)

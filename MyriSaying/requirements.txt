@@ -1,9 +1,0 @@
-# Only needed to rebuild the font outlines and independently audit exports.
-# MyriSaying.py itself uses only the Python standard library.
-fonttools==4.66.1
-uharfbuzz==0.56.3
-shapely==2.2.0
-mapbox-earcut==2.1.0
-trimesh>=4.0
-numpy>=1.26
-Pillow>=10

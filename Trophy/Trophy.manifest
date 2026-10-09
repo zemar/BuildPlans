@@ -1,0 +1,11 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "script",
+  "author": "",
+  "description": {
+    "": "Volleyball trophy prototype: tapered base, twisted hourglass stand, raised white lettering and raised red year. Manual Fusion 3MF export."
+  },
+  "version": "2.0.1",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac"
+}

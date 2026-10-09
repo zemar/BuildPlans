@@ -1,131 +1,27 @@
-# Valley Catholic 2026 multicolor volleyball trophy
+# Trophy
 
-Run `Trophy.py` inside Autodesk Fusion. It creates a new document
-with a 127 mm / 5 inch trophy and an 88 × 64 mm footprint. The model is
-Z-up with its underside at Z=0. A single `Trophy` component contains all four bodies.
+Run `Trophy.py` in Autodesk Fusion to generate a new 127 mm trophy.
 
-The four bodies are **Volleyball - White**, **Base - Black**, **Stand - Black**,
-and **Writing - White**. The stand includes the cradle under the ball.
-All writing is one connected solid: a hidden 0.6 mm backing plate connects
-its letters inside the base. The visible lettering fills matching 1.2 mm deep
-pockets, flush with the front. Black centers of enclosed letters retain hidden
-connections to the black base through holes in the white backing. Both black
-and white volumes remain connected, and meet without material overlap.
+- One continuous tapered base, without a bottom step: 88 × 64 mm at the bottom,
+  76 × 52 mm at the top, 30 mm tall.
+- An hourglass stand with a narrow middle, flared ends, a 120° decorative
+  twist, and a matching ball cradle.
+- White base lettering raised 1.2 mm from the sloped front: player name,
+  `Valley Catholic`, and `Catholic Youth Organization`.
+- `2026` on the volleyball front, in red digits raised 1.2 mm with curved
+  outer surfaces following the sphere.
 
-The front reads the configured player name, followed by:
+The model is Z-up, with the underside at Z=0. The `Trophy` component contains
+Base, Stand, Volleyball, one connected white Writing body, and four red Year
+bodies. A hidden backing connects the base letters; their anchors and the year
+anchors occupy matching pockets, avoiding overlapping black/white material.
 
-```text
-Valley Catholic 2026
-Catholic Youth Organization
-```
+Edit `PLAYER_NAME`, then rerun. Export **Trophy → Save As Mesh → 3MF → Millimeter
+→ One File**. In Bambu Studio, import all bodies as one multipart object and
+assign black to Base and Stand; assign white to Volleyball and Writing; assign red to
+the four Year digits. This version uses three filament colors. Configure the H2D and supports in Bambu Studio before slicing.
 
-## Run
-
-1. Edit `PLAYER_NAME` near the top of the Python file for each player.
-   The current value is `Myriam Howard`. Names support up to 24 characters.
-2. In Fusion, open **Utilities → Scripts and Add-Ins → Scripts**.
-3. Add the folder containing the Python file and matching manifest, select
-   **ValleyCatholicTrophy**, and click **Run**.
-4. Save the new Fusion design when the completion message appears.
-
-The default workflow creates the Fusion design for manual export; Bambu Studio
-is not required to run the script. Right-click **Trophy → Save As Mesh**, choose
-**3MF**, **Millimeter**, and **One File**, and save as **trophy.3mf**. In Bambu,
-import the four bodies as **one object with multiple parts**, preserving their
-positions. Assign black to Base + Stand and white to Volleyball + Writing.
-Choose your H2D printer and actual filament profiles, enable tree supports,
-then slice. The trophy should stand upright with its flat base on the plate.
-
-Fusion's manual exporter creates geometry, not a native Bambu project. It cannot
-embed H2D profiles, nozzle inventory, or reel assignments through this workflow.
-If Bambu offers to load geometry only, accept it and configure the printer there.
-
-`EXPORT_BAMBU_PROJECT = False` is the default. Setting it to `True` enables the
-optional native Bambu project exporter described below. `CAD_Y_UP = False`
-keeps the design in the orientation required for manual slicer exports; setting
-it to `True` restores the earlier Y-up CAD layout, which needs rotation after
-manual export.
-
-## Sidecar logs
-
-Each run writes **ValleyCatholicTrophy.log** in the same folder as the Python
-file, independent of Fusion's working directory. The log includes timestamps,
-configuration, stages, inlay body counts, and the final result. Errors include
-the failed stage and full Python traceback. The newest run replaces the old
-log. If writing fails, the diagnostic is printed to Fusion's Python output.
-
-After running in Fusion from this workspace, tell the assistant **check the
-log**; no error copying is needed.
-
-## Export and H2D filament assignment
-
-The default CAD model has **+Z up**, the flat bottom at Z=0, and lettering facing **−Y**.
-The following steps apply only when the optional native Bambu exporter is enabled.
-
-1. Run the script, then open **ValleyCatholicTrophy - Bambu.3mf** directly
-   in Bambu Studio. The native project contains one assembled object with
-   four named parts: Base, Stand, Volleyball, and Writing. Writing is one connected solid for a single filament assignment.
-2. The project is upright and centered on the H2D plate. It includes an H2D
-   0.4 mm nozzle profile, Generic PLA for both filaments, 0.16 mm layers, and
-   tree supports. Verify these profiles match your actual nozzles and reels.
-   It assumes two standard 0.4 mm nozzles, maps black to nozzle 1 and white
-   to nozzle 2, and places the prime tower within both nozzles' shared area.
-3. Filament 1 is black for Base + Stand. Filament 2 is white for Volleyball
-   + Writing. Map these to your loaded reels before printing.
-4. Slice and inspect the lettering, ball supports, and the 127 mm upright
-   height before printing. No printer G-code is generated by the script.
-5. Each run replaces the generated project after the new export passes its
-   checks. Save any custom Bambu Studio edits under a different project name.
-
-For manual export with `EXPORT_BAMBU_PROJECT=False`, use **Save As Mesh** on
-the Trophy component and include every body in a single 3MF. Import as one
-object with multiple parts, preserve their positions, and use **Lay on Face**
-on the base's flat underside. The manual export remains geometry-only.
-
-For compatible PLA filaments and a 0.4 mm nozzle, suggested starting settings
-are 0.16 mm layers, 3 walls, 5 top/bottom layers, 15% gyroid infill, and tree
-supports. These are starting settings, not a tested H2D print profile.
-
-## Bambu Studio's invalid-config warning
-
-Fusion's Save As Mesh produces a geometry-only 3MF, without Bambu printer or
-filament configuration. Some Bambu Studio versions label this as "invalid
-config" even for valid geometry; this is a [reported Bambu Studio issue](https://github.com/bambulab/BambuStudio/issues/11927).
-
-The automatic export avoids this warning by passing the assembled geometry
-to Bambu Studio's own project exporter. It uses temporary full H2D and filament
-profiles resolved from the installed application, then checks the resulting
-native configuration and all four color assignments. Fusion face vertices are
-welded into shared mesh vertices before export; every body must have closed,
-consistently oriented edges and one connected shell. After export the script
-reopens the project with Bambu Studio and rejects open edges, an unexpected
-number of connected parts, or an incorrect upright height. Exporter output and
-errors are recorded in the same sidecar log. Export creates an unsliced project;
-it does not start a print or modify your Bambu Studio preferences.
-
-The script also checks model slicing using a temporary copy with printer
-startup/end/change templates excluded. Bambu Studio 2.8.2's CLI checker rejects
-special tool commands in its official H2D templates. The published project keeps
-the original templates; diagnostic G-code is discarded. This validates model
-layers and nozzle reach, not printer-ready G-code or a physical print.
-
-Print the trophy standing on its flat base. Both the default Fusion design and Bambu Studio use Z as the upright axis.
-Manual exports from older Y-up designs can lie sideways; rerun the revised script
-to create a fresh Z-up design. Manual exports lack native Bambu configuration.
-
-If you manually export from Fusion, accept the geometry-only import, configure
-it in Bambu Studio, and use **File → Save Project As** to produce a native project.
-
-## Validation
-
-The script checks each body is a solid with one connected region, verifies
-that the lettering volumes match their pockets, and measures the overall
-height. Syntax and sidecar logging can be checked outside Fusion. The native export path was tested against the actual duplicate-vertex mesh
-from a failed export, with a connected lettering backing and matching black
-base pocket, then reloaded in the installed Bambu Studio. All four parts were
-independently checked for watertight meshes and one connected region. Meshing fresh geometry through Fusion must
-still be verified by running the updated script. No physical print was tested.
-
-Fusion's [Save As Mesh documentation](https://help.autodesk.com/view/fusion360/ENU/?contextId=MESH-SAVE-AS-MESH)
-describes exporting component bodies to 3MF. Manual Fusion exports do not receive native Bambu
-configuration. Use the automatically generated Bambu project for direct opening.
+The script logs stages and exceptions to `Trophy.log` beside the Python file.
+Prototype version is tracked in `Trophy.manifest` and recorded in the log.
+The script creates the Fusion model; export 3MF manually from Fusion. It creates
+no assets, exports, or tests folders and requires no helper scripts.

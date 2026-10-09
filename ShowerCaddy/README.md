@@ -1,6 +1,6 @@
 # Reinforced shower caddy assembly
 
-Run `ShowerCaddy.py` in Fusion through **Utilities → Scripts and Add-Ins → Scripts**. Keep `assets/panda_camel_inlay.json` with the script. Every run creates a new, unsaved design and appends diagnostics to `ShowerCaddy.log`. Export manually from Fusion; no STL or other mesh export is generated automatically.
+Run `ShowerCaddy.py` in Fusion through **Utilities → Scripts and Add-Ins → Scripts**. The artwork is embedded in this single Python file; no assets folder, preparation script, package installation, or command-line step is needed. Every run creates a new, unsaved design and appends diagnostics to `ShowerCaddy.log`. Export manually from Fusion; no STL or other mesh export is generated automatically.
 
 The design now has three aligned components in a rigid group:
 
@@ -37,18 +37,12 @@ The artwork remains approximately **72.97 × 80 mm**, including the central came
 
 A matching basket recess provides 0.2 mm clearance on each side and 0.15 mm adhesive space behind the plate, leaving 1.05 mm of the original front wall. The assembled artwork is flush with the basket front. All color regions are ordinary solid bodies, with names for manual filament assignment. Display appearances do not automatically select AMS slots. Five filament colors are used including black.
 
-The [artwork preview](inlay-preview.png) shows the color layout. It is not a Fusion rendering of the new assembly. `prepare_inlay.py` rebuilds the JSON, SVG and PNG using NumPy, SciPy, Shapely and Pillow; Fusion requires only its API and Python's standard library.
+The [artwork preview](inlay-preview.png) shows the color layout. It is not a Fusion rendering of the new assembly. The former preparation script's finished CAD contours are embedded in `ShowerCaddy.py`, preserving the artwork exactly. Fusion reads and validates them using Python's standard library. Size, depth, and display colors remain adjustable using the constants at the top of the script.
 
 ## Printing and checks
 
 Follow [PRINTING.md](PRINTING.md) for the changed arm orientation, six-wall recommendation and solid mounting-junction modifiers. These are slicer settings you must apply in Bambu Studio; CAD attributes only record the intent.
 
-Run local dimension/fit tests with:
-
-```sh
-python3 -m unittest discover -s ShowerCaddy/tests -v
-```
-
-The script checks component/body counts, connected solids, feature health, artwork fit, and high-accuracy pocket volumes, and logs failures. Local tests check taper geometry, mount alignment, hardware engagement, panel clearance and dimension limits. Fusion kernel execution and physical load testing of this redesigned assembly remain unverified. The previous integrated basket and artwork were successfully generated in Fusion; this revision needs a new run.
+The script checks component/body counts, connected solids, feature health, artwork fit, and high-accuracy pocket volumes, and logs failures. The embedded artwork was checked against the previous asset byte-for-byte and through the dimension/fit validation. Fusion kernel execution and physical load testing of this redesigned assembly remain unverified. The previous integrated basket and artwork were successfully generated in Fusion; this revision needs a new run.
 
 The first assembly run completed the basket, arm-frame solids and R4 hook bends, then failed the smaller arm fillet with `ASM_BL_END_TOO_CMPLX`. The arm corner and finishing fillets now enable tangent-chain propagation so they follow the curved hook edges instead of stopping at straight-to-arc transitions. Other components retain their existing fillet behavior. The sidecar records the tangent-chain setting and identifies this revision as `reinforced-assembly-v2-tangent-fillets`. Local checks passed; the revised fillets require a Fusion rerun. See Autodesk's [constant-radius tangent-chain option](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/fusion_FilletEdgeSetInputs_addConstantRadiusEdgeSet.htm).

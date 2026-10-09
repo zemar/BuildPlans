@@ -3,9 +3,9 @@
   "type": "script",
   "author": "",
   "description": {
-    "": "Create four independent brown drawer bins and export flat, unrotated meshes for cutting in Bambu Studio."
+    "": "Create four independent brown drawer bins in Fusion, ready for manual mesh export and cutting in Bambu Studio."
   },
-  "version": "4.0.0",
+  "version": "4.1.0",
   "runOnStartup": false,
   "supportedOS": "windows|mac"
 }

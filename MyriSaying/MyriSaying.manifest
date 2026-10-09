@@ -2,8 +2,8 @@
   "autodeskProduct": "Fusion360",
   "type": "script",
   "author": "",
-  "description": {"": "Generate a black 200 x 100 x 3 mm plaque with a brown twisted-rope frame, white cursive and two rear supports for a 10-degree backward lean."},
-  "version": "1.0.0",
+  "description": {"": "Self-contained Fusion script: black 200 x 100 x 3 mm plaque, brown twisted-rope frame, raised white cursive and two rear supports. Creates mesh bodies directly in memory and writes a log sidecar."},
+  "version": "1.1.0",
   "runOnStartup": false,
   "supportedOS": "windows|mac"
 }

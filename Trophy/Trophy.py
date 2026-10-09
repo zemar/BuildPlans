@@ -2,18 +2,12 @@
 
 Creates a 127 mm trophy with separate volleyball, base, stand, and text bodies.
 All dimensions below are millimeters; Fusion geometry uses centimeters.
-Uses Fusion's bundled API and Python's standard library. Native 3MF export
-uses the locally installed Bambu Studio application and its H2D profiles.
+Creates the Fusion design for manual Save As Mesh export to 3MF.
+Prototype version is recorded in Trophy.manifest; run diagnostics in Trophy.log.
 """
 import math
 import json
-import re
-import shutil
-import subprocess
-import tempfile
 import traceback
-import xml.etree.ElementTree as ET
-import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 import adsk.core
@@ -29,289 +23,8 @@ ENGRAVE_DEPTH_MM = 1.2  # Hidden anchoring depth for contrasting base lettering.
 RAISED_TEXT_MM = 1.2
 BASE_TAPER = 0.2  # Six millimeters inward over the 30 mm base height.
 STAND_TWIST_DEGREES = 120.0
-EXPORT_BAMBU_PROJECT = False
 # Z-up is required for direct Fusion Save As Mesh exports to slicers.
 CAD_Y_UP = False
-BAMBU_EXECUTABLE = '/Applications/BambuStudio.app/Contents/MacOS/BambuStudio'
-BAMBU_MACHINE_PROFILE = 'Bambu Lab H2D 0.4 nozzle'
-BAMBU_PROCESS_PROFILE = '0.16mm Standard @BBL H2D'
-BAMBU_FILAMENT_PROFILE = 'Generic PLA @BBL H2D'
-
-
-def closed_mesh(coordinates, indices, name):
-    """Stitch Fusion's per-face vertices into an indexed, closed solid mesh."""
-    vertices, remap, lookup = [], [], {}
-    # One-millionth mm is far below printing precision but absorbs floating
-    # point residue at coincident face boundaries. Serialize these same points.
-    for p in coordinates:
-        key = tuple(round(value * 1000000) for value in ((p.x * 10, -p.z * 10, p.y * 10) if CAD_Y_UP
-                                    else (p.x * 10, p.y * 10, p.z * 10)))
-        if key not in lookup:
-            lookup[key] = len(vertices)
-            vertices.append(tuple(value / 1000000 for value in key))
-        remap.append(lookup[key])
-    if len(indices) % 3:
-        raise RuntimeError('Invalid triangle indices: ' + name)
-    triangles, edges, neighbors = [], {}, {}
-    volume6 = 0.0
-    for i in range(0, len(indices), 3):
-        triangle = tuple(remap[indices[i + j]] for j in range(3))
-        if len(set(triangle)) != 3:
-            # A triangle collapsed onto a welded seam carries no surface.
-            # Discard it; the edge audit below still requires a closed mesh.
-            continue
-        a, b, c = triangle
-        pa, pb, pc = vertices[a], vertices[b], vertices[c]
-        volume6 += (pa[0] * (pb[1] * pc[2] - pb[2] * pc[1])
-                    + pa[1] * (pb[2] * pc[0] - pb[0] * pc[2])
-                    + pa[2] * (pb[0] * pc[1] - pb[1] * pc[0]))
-        for start, end in ((a, b), (b, c), (c, a)):
-            key = (min(start, end), max(start, end))
-            count, winding = edges.get(key, (0, 0))
-            edges[key] = (count + 1, winding + (1 if start < end else -1))
-            neighbors.setdefault(start, set()).add(end)
-            neighbors.setdefault(end, set()).add(start)
-        triangles.append(triangle)
-    invalid = sum(count != 2 or winding != 0 for count, winding in edges.values())
-    if invalid or not triangles:
-        raise RuntimeError('Mesh is not a closed, consistently wound solid: {} ({} invalid edges)'
-                           .format(name, invalid))
-    if volume6 <= 0:
-        raise RuntimeError('Mesh has inward faces or zero volume: ' + name)
-    # Each Fusion body must remain a single shell. The Writing part combines
-    # multiple individually validated bodies afterward, keeping each glyph.
-    visited = set()
-    queue = [triangles[0][0]]
-    while queue:
-        vertex = queue.pop()
-        if vertex not in visited:
-            visited.add(vertex)
-            queue.extend(neighbors[vertex] - visited)
-    if len(visited) != len(neighbors):
-        raise RuntimeError('Disconnected shells in body mesh: ' + name)
-    return vertices, triangles
-
-
-def write_assembled_mesh(path, groups, title):
-    """Named material parts; preserve Z-up or convert the optional Y-up layout."""
-    core = 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'
-    material = 'http://schemas.microsoft.com/3dmanufacturing/material/2015/02'
-    ET.register_namespace('', core)
-    ET.register_namespace('m', material)
-    tag = lambda name: '{' + core + '}' + name
-    model = ET.Element(tag('model'), unit='millimeter', attrib={'xml:lang': 'en-US'})
-    ET.SubElement(model, tag('metadata'), name='Title').text = title
-    resources = ET.SubElement(model, tag('resources'))
-    colors = ET.SubElement(resources, '{' + material + '}colorgroup', id='10')
-    for color in ('#000000FF', '#FFFFFFFF', '#FF0000FF'):
-        ET.SubElement(colors, '{' + material + '}color', color=color)
-    config = ET.Element('config')
-    config_object = ET.SubElement(config, 'object', id='5')
-    ET.SubElement(config_object, 'metadata', key='name', value=title)
-    for part_id, (name, bodies, filament) in enumerate(groups, 1):
-        obj = ET.SubElement(resources, tag('object'), id=str(part_id), name=name,
-                            type='model', pid='10', pindex=str(filament - 1))
-        mesh = ET.SubElement(obj, tag('mesh'))
-        vertices = ET.SubElement(mesh, tag('vertices'))
-        triangles = ET.SubElement(mesh, tag('triangles'))
-        offset = 0
-        for body in bodies:
-            calculator = body.meshManager.createMeshCalculator()
-            calculator.surfaceTolerance = 0.002  # cm: 0.02 mm surface tolerance.
-            mesh_data = calculator.calculate()
-            if mesh_data is None:
-                raise RuntimeError('Could not mesh body: ' + body.name)
-            coordinates, body_triangles = closed_mesh(
-                mesh_data.nodeCoordinates, mesh_data.nodeIndices, body.name)
-            for x, y, z in coordinates:
-                ET.SubElement(vertices, tag('vertex'),
-                              x=format(x, '.9f'), y=format(y, '.9f'), z=format(z, '.9f'))
-            for a, b, c in body_triangles:
-                ET.SubElement(triangles, tag('triangle'),
-                              v1=str(a + offset), v2=str(b + offset), v3=str(c + offset))
-            offset += len(coordinates)
-        if not offset or not len(triangles):
-            raise RuntimeError('No printable mesh for ' + name)
-        part = ET.SubElement(config_object, 'part', id=str(part_id), subtype='normal_part')
-        ET.SubElement(part, 'metadata', key='name', value=name)
-        ET.SubElement(part, 'metadata', key='extruder', value=str(filament))
-        write_run_log('MESH: {}; vertices={}; triangles={}; filament={}'.format(
-            name, offset, len(triangles), filament))
-    assembly = ET.SubElement(resources, tag('object'), id=str(len(groups) + 1), name=title, type='model')
-    components = ET.SubElement(assembly, tag('components'))
-    assembly_id = len(groups) + 1
-    config_object.set("id", str(assembly_id))
-    for part_id in range(1, assembly_id):
-        ET.SubElement(components, tag('component'), objectid=str(part_id))
-    build = ET.SubElement(model, tag('build'))
-    ET.SubElement(build, tag('item'), objectid=str(assembly_id),
-                  transform='1 0 0 0 1 0 0 0 1 175 160 0')
-    content_types = ('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-                     '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-                     '<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>'
-                     '<Default Extension="config" ContentType="application/xml"/></Types>')
-    relationships = ('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                     '<Relationship Target="/3D/3dmodel.model" Id="rel0" '
-                     'Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>')
-    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr('[Content_Types].xml', content_types)
-        archive.writestr('_rels/.rels', relationships)
-        archive.writestr('3D/3dmodel.model', ET.tostring(model, encoding='utf-8', xml_declaration=True))
-        archive.writestr('Metadata/model_settings.config',
-                         ET.tostring(config, encoding='utf-8', xml_declaration=True))
-
-
-def configure_h2d_project(path):
-    """Supply the physical nozzle inventory omitted by Bambu's CLI exporter."""
-    pending = path.with_suffix('.configured.3mf')
-    with zipfile.ZipFile(path) as source, zipfile.ZipFile(pending, 'w', zipfile.ZIP_DEFLATED) as target:
-        for item in source.infolist():
-            data = source.read(item.filename)
-            if item.filename == 'Metadata/project_settings.config':
-                settings = json.loads(data)
-                settings.update(extruder_nozzle_stats=['Standard#1', 'Standard#1'],
-                                filament_map=['1', '2', '2'], filament_map_2=['1', '2', '2'],
-                                filament_nozzle_map=['1', '2', '2'], filament_map_mode='Manual',
-                                wipe_tower_x=['80'], wipe_tower_y=['230'])
-                data = json.dumps(settings).encode('utf-8')
-            elif item.filename == 'Metadata/model_settings.config':
-                config = ET.fromstring(data)
-                for entry in config.findall('plate/metadata'):
-                    if entry.get('key') == 'filament_map_mode':
-                        entry.set('value', 'Manual')
-                data = ET.tostring(config, encoding='utf-8', xml_declaration=True)
-            target.writestr(item, data)
-    pending.replace(path)
-
-
-def export_bambu_project(groups, player_name):
-    """Use installed Bambu Studio to generate its own complete native config."""
-    executable = Path(BAMBU_EXECUTABLE)
-    if not executable.is_file():
-        raise RuntimeError('Bambu Studio not found. Set BAMBU_EXECUTABLE, or set '
-                           'EXPORT_BAMBU_PROJECT=False to generate just the Fusion design.')
-    profile_root = executable.parent.parent / 'Resources' / 'profiles' / 'BBL'
-    index = {p.stem: p for p in profile_root.rglob('*.json')}
-
-    def resolve(name, ancestry=()):
-        if name in ancestry:
-            raise RuntimeError('Bambu profile inheritance cycle: ' + name)
-        if name not in index:
-            raise RuntimeError('Bambu profile not installed: ' + name)
-        data = json.loads(index[name].read_text(encoding='utf-8'))
-        result = {}
-        if data.get('inherits'):
-            result.update(resolve(data['inherits'], ancestry + (name,)))
-        for include in data.get('include', []):
-            result.update(resolve(include, ancestry + (name,)))
-        result.update(data)
-        result.pop('inherits', None)
-        result.pop('include', None)
-        return result
-
-    output = Path(__file__).resolve().with_name('Trophy.3mf')
-    write_run_log('BAMBU EXPORT: {}; {}; {}; {}'.format(
-        output, BAMBU_MACHINE_PROFILE, BAMBU_PROCESS_PROFILE, BAMBU_FILAMENT_PROFILE))
-    with tempfile.TemporaryDirectory(prefix='trophy-bambu-') as directory:
-        temporary = Path(directory)
-        assembled = temporary / 'assembled.3mf'
-        write_assembled_mesh(assembled, groups, 'Valley Catholic 2026 - ' + player_name)
-        machine = resolve(BAMBU_MACHINE_PROFILE)
-        process = resolve(BAMBU_PROCESS_PROFILE)
-        process.update(enable_support='1', support_type='tree(auto)',
-                       support_on_build_plate_only='0')
-        filament = resolve(BAMBU_FILAMENT_PROFILE)
-        for filename, data in (('machine', machine), ('process', process),
-                               ('black', dict(filament, filament_colour=['#000000'])),
-                               ('white', dict(filament, filament_colour=['#FFFFFF'])),
-                               ('red', dict(filament, filament_colour=['#FF0000']))):
-            (temporary / (filename + '.json')).write_text(json.dumps(data), encoding='utf-8')
-        native = temporary / 'project.3mf'
-        command = [str(executable), '--datadir', str(temporary / 'settings'),
-                   '--arrange', '0', '--orient', '0',
-                   '--load-settings', str(temporary / 'machine.json') + ';' + str(temporary / 'process.json'),
-                   '--load-filaments', str(temporary / 'black.json') + ';' + str(temporary / 'white.json') + ';' + str(temporary / 'red.json'),
-                   '--export-3mf', str(native), str(assembled)]
-        result = subprocess.run(command, cwd=str(temporary), capture_output=True,
-                                text=True, errors='replace', timeout=120)
-        if result.stdout.strip():
-            write_run_log('BAMBU STDOUT:\n' + result.stdout.strip())
-        if result.stderr.strip():
-            write_run_log('BAMBU STDERR:\n' + result.stderr.strip())
-        if result.returncode or not native.is_file():
-            raise RuntimeError('Bambu project export failed (exit {}). See sidecar log.'.format(result.returncode))
-        configure_h2d_project(native)
-        with zipfile.ZipFile(native) as archive:
-            if archive.testzip():
-                raise RuntimeError('Bambu output archive failed its integrity check.')
-            settings = json.loads(archive.read('Metadata/project_settings.config'))
-            if settings.get('printer_model') != 'Bambu Lab H2D':
-                raise RuntimeError('Exported project has the wrong printer profile.')
-            if settings.get('filament_colour') != ['#000000', '#FFFFFF', '#FF0000']:
-                raise RuntimeError('Exported project does not have the requested three filament colors.')
-            if settings.get('extruder_nozzle_stats') != ['Standard#1', 'Standard#1']:
-                raise RuntimeError('Missing H2D standard nozzle inventory.')
-            config = ET.fromstring(archive.read('Metadata/model_settings.config'))
-            parts = config.findall('object/part')
-            if len(parts) != len(groups):
-                raise RuntimeError('Unexpected number of assembled filament parts in exported project.')
-            for part in parts:
-                meta = {p.get('key'): p.get('value') for p in part.findall('metadata')}
-                if meta.get('extruder') != ('3' if 'Red' in meta.get('name', '') else '2' if 'White' in meta.get('name', '') else '1'):
-                    raise RuntimeError('Wrong filament assignment for ' + meta.get('name', 'unnamed part'))
-        # Export success alone does not prove the file will import correctly.
-        # Reopen it through Bambu Studio and require intact, watertight parts.
-        check = subprocess.run([str(executable), '--datadir', str(temporary / 'settings'),
-                                '--info', str(native)], cwd=str(temporary),
-                               capture_output=True, text=True, errors='replace', timeout=120)
-        report = check.stdout + '\n' + check.stderr
-        write_run_log('BAMBU REIMPORT:\n' + report.strip())
-        if check.returncode or 'manifold = yes' not in report:
-            raise RuntimeError('Bambu Studio could not reload the exported trophy as a solid.')
-        open_edges = re.findall(r'^open_edges\s*=\s*(\d+)', report, re.MULTILINE)
-        if any(int(count) for count in open_edges):
-            raise RuntimeError('Bambu Studio found open edges in the exported trophy.')
-        part_counts = re.findall(r'^number_of_parts\s*=\s*(\d+)', report, re.MULTILINE)
-        expected_shells = sum(len(bodies) for _, bodies, _ in groups)
-        if part_counts != [str(expected_shells)]:
-            raise RuntimeError('Bambu import changed the connected parts: expected {}, got {}.'
-                               .format(expected_shells, part_counts))
-        heights = re.findall(r'^size_z\s*=\s*([\d.]+)', report, re.MULTILINE)
-        if len(heights) != 1 or abs(float(heights[0]) - TOTAL_HEIGHT_MM) > 0.1:
-            raise RuntimeError('Bambu import changed the trophy height or assembly orientation.')
-        # Verify model layers separately from printer startup templates. This
-        # CLI version rejects official H2D T1001/T65535/T65279 template commands.
-        # Never publish this diagnostic project or its G-code.
-        diagnostic = temporary / 'layers-only.3mf'
-        with zipfile.ZipFile(native) as source, zipfile.ZipFile(diagnostic, 'w', zipfile.ZIP_DEFLATED) as target:
-            for item in source.infolist():
-                data = source.read(item.filename)
-                if item.filename == 'Metadata/project_settings.config':
-                    config = json.loads(data)
-                    for key in ('machine_start_gcode', 'machine_end_gcode', 'change_filament_gcode',
-                                'layer_change_gcode', 'time_lapse_gcode', 'before_layer_change_gcode'):
-                        config[key] = ''
-                    data = json.dumps(config).encode('utf-8')
-                target.writestr(item, data)
-        sliced = subprocess.run([str(executable), '--datadir', str(temporary / 'settings'),
-                                 '--arrange', '0', '--orient', '0', '--slice', '0',
-                                 '--outputdir', str(temporary), str(diagnostic)],
-                                cwd=str(temporary), capture_output=True, text=True,
-                                errors='replace', timeout=120)
-        write_run_log('BAMBU LAYER CHECK (printer templates excluded):\n' +
-                      (sliced.stdout + '\n' + sliced.stderr).strip())
-        if sliced.returncode or not (temporary / 'plate_1.gcode').is_file():
-            raise RuntimeError('Bambu could not slice the trophy layers. See sidecar log.')
-        # Replace the prior export only after the new project passes checks.
-        pending = output.with_suffix('.3mf.tmp')
-        try:
-            shutil.copyfile(native, pending)
-            pending.replace(output)
-        finally:
-            if pending.exists():
-                pending.unlink()
-    write_run_log('BAMBU EXPORT OK: ' + str(output))
-    return output
 
 
 def write_run_log(message, reset=False):
@@ -725,6 +438,9 @@ def run(context):
     write_run_log("CONFIG: player={!r}; height={} mm; inlay depth={} mm; separate bodies"
                   .format(PLAYER_NAME, TOTAL_HEIGHT_MM, ENGRAVE_DEPTH_MM))
     try:
+        manifest = json.loads(Path(__file__).resolve().with_suffix('.manifest').read_text(encoding='utf-8'))
+        prototype_version = manifest['version']
+        write_run_log('PROTOTYPE VERSION: ' + str(prototype_version))
         app = adsk.core.Application.get()
         ui = app.userInterface
         name = PLAYER_NAME.strip()
@@ -835,28 +551,16 @@ def run(context):
         camera.upVector = vector(0, 1, 0) if CAD_Y_UP else vector(0, 0, 1)
         camera.isFitView = True
         app.activeViewport.camera = camera
-        output = None
-        if EXPORT_BAMBU_PROJECT:
-            stage = "native Bambu project export"
-            write_run_log("STAGE: " + stage)
-            groups = [('Base - Black', [base], 1), ('Stand - Black', [stand], 1),
-                      ('Volleyball - White', [ball], 2), ('Writing - White', lettering, 2),
-                      ('Year 2026 - Red', year_digits, 3)]
-            output = export_bambu_project(groups, name)
         write_run_log(
-            'SUCCESS: multipart trophy; height={:.3f} mm; export component Trophy. '
-            'Bodies: 3 structural + 1 white writing + {} red year digits. Export: {}. Print not verified.'
-            .format(height, len(year_digits), output or 'manual export selected'))
+            'SUCCESS: height={:.3f} mm; export component Trophy; '
+            '3 structural bodies + 1 white writing + {} red year digits. '
+            'Ready for manual Fusion 3MF export. Print not verified.'
+            .format(height, len(year_digits)))
         if not automated:
             export_message = (
-                "Bambu project saved beside this script:\n{}\n"
-                "Open it directly in Bambu Studio. It has five assembled parts.\n"
-                "Profiles: H2D 0.4 mm nozzles, Generic PLA, 0.16 mm layers, tree supports.\n"
-                "Verify these match your actual nozzles and filament, then slice.\n"
-                .format(output.name) if output else
                 "Right-click Trophy > Save As Mesh.\n"
                 "Format: 3MF; units: millimeters; structure: One File.\n"
-                "Save as trophy.3mf. Import all bodies as one multipart object.\n")
+                "Save as Trophy.3mf. Import all bodies as one multipart object.\n")
             ui.messageBox(
                 "Created a {:.1f} mm (5 inch) trophy for {}.\n\n".format(height, name) +
                 "Tapered base, twisted stand, raised white text and raised red 2026.\n" +
@@ -865,7 +569,7 @@ def run(context):
                 "Colors: BLACK base/stand; WHITE volleyball/base writing; RED year.\n"
                 "Save the Fusion design.\n" + export_message +
                 "Assign black, white, and red parts to the matching reels.\n"
-                "Run results are saved in TrophyMkII.log beside the script.\n\n"
+                "Run results are saved in Trophy.log beside the script.\n\n"
                 "Change PLAYER_NAME at the top of the script and rerun for another player.",
                 "Valley Catholic volleyball trophy")
     except Exception:
