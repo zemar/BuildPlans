@@ -1,57 +1,54 @@
-# Shower caddy
+# Reinforced shower caddy assembly
 
-Run `ShowerCaddy.py` in Autodesk Fusion via **Utilities > Scripts and Add-Ins > Scripts**. Add this folder as a script, select ShowerCaddy, and click Run. It creates a new unsaved design containing one basket. Save the design from Fusion.
+Run `ShowerCaddy.py` in Fusion through **Utilities → Scripts and Add-Ins → Scripts**. Keep `assets/panda_camel_inlay.json` with the script. Every run creates a new, unsaved design and appends diagnostics to `ShowerCaddy.log`. Export manually from Fusion; no STL or other mesh export is generated automatically.
 
-All dimensions below and all script inputs are millimeters.
+The design now has three aligned components in a rigid group:
 
-| Dimension | Value |
-| --- | ---: |
-| Basket outside width | 259 |
-| Basket outside depth | 88.9 |
-| Basket height from underside to rim | 101.6 |
-| Hook rise from basket underside to bridge underside | 305 |
-| Clear backward opening for glass | 25.5 |
-| Overall height including hook bridge | 311 |
-| Overall depth including backward hook | 120.4 |
+| Component | Solids | Purpose |
+| --- | ---: | --- |
+| 01 Basket | 1 | Mesh-bottom basket, rear mounting pads, front artwork recess |
+| 02 Engraving - multicolor | 55 | One black backing plus 54 white/green/red/brown inlays; print together as one plate |
+| 03 Reinforced arms | 1 | Both hooks, widened arm roots and a connecting crossbar |
 
-Each shelf has two rear-corner uprights and backward hooks with downward returns. The 25.5 dimension is interpreted as the clear throat between the upright and return, not the outside hook envelope. Duplicate the basket in your slicer to print three identical shelves.
+The engraving uses separate color bodies within one component as requested. It is not a single-material body. Do not arrange its individual color bodies separately in the slicer.
 
-Assumed construction dimensions are editable at the top of the script: 3 mm walls and floor, 25 mm wide × 6 mm thick hooks, 30 mm downward returns, and 8 mm square mesh openings with 3 mm webs and at least 6 mm border. The floor contains 154 through-openings. All edges—including basket rims, interior corners, hooks, and drainage openings—are rounded in two stages: vertical corners use `CORNER_RADIUS = 1.0` mm, then horizontal perimeter edges (including the newly curved corners) use `EDGE_RADIUS = 0.75` mm. The corner radius must exceed the rim radius to avoid a collapsed corner during the second operation. If Fusion cannot solve the complete fillet, the script reports an error rather than skipping edges. Dimensions above describe the geometry before edge rounding.
+## Dimensions and reinforcement
 
-Intended fabrication material is **black PLA**. The script applies a black visual finish and stores the material intent as a component attribute. It does not assign PLA engineering properties or slicer settings. Strength and printability have not been validated in Fusion or by a physical prototype.
+All dimensions are millimeters. The basket remains **259 wide × 88.9 deep × 101.6 high**, including its 3 mm floor. Drainage uses 154 square openings, 8 mm wide with 3 mm webs. The hooks rise to a bridge underside at **305 mm from the basket bottom**, with **25.5 mm clear throat** and 30 mm downward returns. With thicker hook bridges the assembly is now **315 mm high**.
 
-Edit constants and rerun to regenerate a new design. Syntax and dimensional calculations were checked locally; Fusion geometry execution requires Fusion.
+Arms are **25 mm wide × 10 mm thick**, increased from 6 mm thickness. Each root expands inward by 20 mm to a 45 mm-wide mounting web. Two tangent R25 arcs taper that web smoothly over **40 mm above the basket rim**. The root extends below the rim to 15 mm above the basket bottom. This removes the former abrupt arm-to-rim transition; the arms now connect mechanically to reinforced pads instead of growing from the basket wall.
 
-API references: [ExtrudeFeatures.addSimple](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/fusion_ExtrudeFeatures_addSimple.htm), [Occurrences.addExistingComponent](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/Occurrences_addExistingComponent.htm), [appearance assignment](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/MaterialSample_Sample.htm).
+The 25 mm-high bottom crossbar connects both arms into one printable frame. Inside hook bends have **4 mm fillets**. Arm edges are rounded in stages, retaining the existing 1 mm corner / 0.75 mm rim rounding where applicable. The frame's basket-facing surface is at Y=0; it occupies negative Y, outside the basket. The glass-contact plane is at Y=-10. The complete assembly depth is 134.4 mm, including hooks; the basket itself remains 88.9 mm deep.
 
-Fillet API: [constant-radius edge sets](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/fusion_FilletEdgeSetInputs_addConstantRadiusEdgeSet.htm).
+## Mechanical assembly
 
-Each run appends timestamped diagnostics to `ShowerCaddy.log` beside the script. The log includes inputs, Fusion version, build steps, mesh and fillet edge counts, feature health, elapsed time, and full error tracebacks. Records flush immediately so the last started operation is visible even if Fusion stalls. Timestamps are UTC; previous runs are retained. The completion/error dialog shows the log path.
+Use **four M4 × 16 mm bolts, four standard M4 hex nuts, and four approximately 1 mm-thick M4 washers**. Hardware is not modeled as additional bodies. Stainless hardware is suitable for the wet location.
 
-The previous one-step fillet failed in Fusion with `ASM_INCONS_FACE` on 1,920 edges. The replacement separates vertical corners and horizontal rims, reacquires edges between features, and logs counts, health, and timings for each stage. This geometry change still needs a Fusion rerun for kernel verification.
+1. Place the nuts into the hexagonal pockets on the basket-facing side of the arm frame.
+2. Align the frame against the basket's rear surface. Mount centers are X=12.5 and 246.5, each at Z=40 and 80.
+3. From inside the basket, put a washer on each bolt and insert it through the 8 mm-thick reinforced rear pad into its captured nut. Tighten snugly without crushing the plastic.
+4. Test-fit the engraving plate in the front recess and secure it with a thin layer of adhesive compatible with the printed plastic and wet use.
 
-The script builds the basket and writes its sidecar log. Export your preferred format manually from Fusion.
+Bolt clearance holes are 4.5 mm. Nut pockets are 7.3 mm across flats and 3.6 mm deep. Arm bolt bores are **blind**, 8.5 mm deep, leaving 1.5 mm of plastic at the glass-facing side. With the specified bolts, washers and 8 mm pads, screw insertion into the arm is about 7 mm. Check actual hardware fit before assembling against the glass; printed fit and hardware dimensions vary.
 
-## Front artwork inlay
+## Engraving plate
 
-Keep `assets/panda_camel_inlay.json` beside the script in its `assets` folder. The artwork is traced from the color-region source used for `CamelandPanda/color-relief-preview.png`: only the central camel and riding panda, including the flag and mouth branch. The two other pandas, surrounding bamboo, and pyramid are excluded.
+The artwork remains approximately **72.97 × 80 mm**, including the central camel, panda rider, flag and mouth branch. The eye highlights and brown oval backdrop are preserved, without the white fur outline. The overall rounded black plate is approximately **80.97 × 88 × 1.8 mm**, with R3 corners. Its 0.6 mm-deep color inlays leave 1.2 mm backing.
 
-The centered artwork is approximately **72.97 mm wide × 80 mm high**. Matching pockets extend **0.6 mm** into the 3 mm front wall, leaving **2.4 mm** of backing. Colored solids fill those pockets flush with the outside face. Dark outlines and panda patches remain the black basket material. The camel uses brown; leaves use green; flag, saddle, and tongue use red; panda face/belly and flag center use white. Small source details are simplified for CAD and may still depend on nozzle and slicer resolution.
+A matching basket recess provides 0.2 mm clearance on each side and 0.15 mm adhesive space behind the plate, leaving 1.05 mm of the original front wall. The assembled artwork is flush with the basket front. All color regions are ordinary solid bodies, with names for manual filament assignment. Display appearances do not automatically select AMS slots. Five filament colors are used including black.
 
-The model contains one black basket body and 54 separate inlay bodies named by color: 9 White, 9 Green, 8 Red, 28 Brown. These are actual non-overlapping solids, not a decal. The existing basket and hook fillets are created before adding the artwork. `INLAY_HEIGHT`, `INLAY_DEPTH`, and `INLAY_COLORS` control the artwork size, pocket depth, and display palette. Appearance is cosmetic; it does not automatically select filament.
+The [artwork preview](inlay-preview.png) shows the color layout. It is not a Fusion rendering of the new assembly. `prepare_inlay.py` rebuilds the JSON, SVG and PNG using NumPy, SciPy, Shapely and Pillow; Fusion requires only its API and Python's standard library.
 
-Export the complete component with **all bodies** in Fusion. In Bambu Studio, preserve them as parts of one object so their alignment stays intact, then assign PLA by the color in each body's name. The complete scheme uses **five filament colors including black**. Avoid placing/arranging the individual inlay parts separately on the plate.
+## Printing and checks
 
-[Front-face vector preview](inlay-preview.svg) and [PNG preview](inlay-preview.png) show the planned color regions and placement, not a Fusion screenshot. Local checks passed for contour validity, non-overlap, area calculations, front-view orientation, wall margins, and remaining thickness. The new inlay features still need a Fusion run; their progress and failures are logged to the sidecar. The earlier plain basket geometry was successfully run in Fusion by the user.
+Follow [PRINTING.md](PRINTING.md) for the changed arm orientation, six-wall recommendation and solid mounting-junction modifiers. These are slicer settings you must apply in Bambu Studio; CAD attributes only record the intent.
 
-`prepare_inlay.py` rebuilds the JSON and SVG from the original color-region data; it requires NumPy, SciPy, Shapely, and Pillow locally. Fusion itself needs only its API and Python's standard library. Source files in `CamelandPanda` are unchanged.
+Run local dimension/fit tests with:
 
-The inlay uses Autodesk's [sketch coordinate conversion](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/fusion_Sketch_modelToSketchSpace.htm) and [Combine with retained tool bodies](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/fusion_CombineFeatureInput_isKeepToolBodies.htm) to cut matching pockets while retaining separate color solids.
+```sh
+python3 -m unittest discover -s ShowerCaddy/tests -v
+```
 
-### Pocket-volume validation repair
+The script checks component/body counts, connected solids, feature health, artwork fit, and high-accuracy pocket volumes, and logs failures. Local tests check taper geometry, mount alignment, hardware engagement, panel clearance and dimension limits. Fusion kernel execution and physical load testing of this redesigned assembly remain unverified. The previous integrated basket and artwork were successfully generated in Fusion; this revision needs a new run.
 
-The 2026-10-08 run built all 49 colored solids and a healthy pocket-cut feature, then failed the script's volume comparison. The old check subtracted two basket-volume readings using a tolerance based only on the much smaller inlay volume and did not log the measured difference. The revised check explicitly requests VeryHigh physical-property accuracy, measures the Combine result body, calculates expected inlay volume from polygon area × depth, and propagates the before/after measurement uncertainty. Actual volumes, discrepancy, and tolerance are now logged. Missing cuts and mismatches outside the uncertainty still fail. Local regression checks passed; a Fusion rerun is needed to confirm this repair. Autodesk documents VeryHigh accuracy as ±0.01% in [CalculationAccuracy](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/CalculationAccuracy.htm).
-
-The next run exposed a second validation assumption: `CombineFeature.bodies` did not contain exactly one body. The script now tags the basket and inlays with persistent `BodyRole` attributes and resolves the finished basket from the component's current bodies, independently of the Combine collection's count or order. It verifies one solid basket and all 49 solid inlays before measuring the pocket volume. The log includes feature/component counts and every resulting body's role. Local regression checks cover reordered bodies, missing or split baskets, missing inlays, and unknown/non-solid bodies; Fusion execution still requires a rerun.
-
-The white fur outline has been removed. Restored white eye details and 0.48 mm-diameter highlights remain, at the existing 0.6 mm inlay depth. `EYE_HIGHLIGHT_RADIUS_MM` in `prepare_inlay.py` controls the highlights when rebuilding the asset. A smooth brown oval now sits behind the panda, using the existing brown filament. It preserves the black fur and original artwork in front of it, without a white outline. The oval is approximately 30.8 × 43.1 mm, and uses the existing 0.6 mm inlay depth. Rerun the Fusion script to regenerate the artwork. Both vector and PNG previews have been refreshed; local contour and non-overlap checks passed.
+The first assembly run completed the basket, arm-frame solids and R4 hook bends, then failed the smaller arm fillet with `ASM_BL_END_TOO_CMPLX`. The arm corner and finishing fillets now enable tangent-chain propagation so they follow the curved hook edges instead of stopping at straight-to-arc transitions. Other components retain their existing fillet behavior. The sidecar records the tangent-chain setting and identifies this revision as `reinforced-assembly-v2-tangent-fillets`. Local checks passed; the revised fillets require a Fusion rerun. See Autodesk's [constant-radius tangent-chain option](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/fusion_FilletEdgeSetInputs_addConstantRadiusEdgeSet.htm).
