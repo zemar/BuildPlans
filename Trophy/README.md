@@ -1,27 +1,29 @@
 # Trophy
 
-Run `Trophy.py` in Autodesk Fusion to generate a new 127 mm trophy.
+Run `Trophy.py` inside Autodesk Fusion. Prototype version is recorded in
+`Trophy.manifest`; stages and exceptions are saved beside it in `Trophy.log`.
 
-- One continuous tapered base, without a bottom step: 88 × 64 mm at the bottom,
-  76 × 52 mm at the top, 30 mm tall.
-- An hourglass stand with a narrow middle, flared ends, a 120° decorative
-  twist, and a matching ball cradle.
-- White base lettering raised 1.2 mm from the sloped front: player name,
-  `Valley Catholic`, and `Catholic Youth Organization`.
-- `2026` on the volleyball front, in red digits raised 1.2 mm with curved
-  outer surfaces following the sphere.
+The trophy is 127 mm tall and stands Z-up, with its underside at Z=0. It has:
 
-The model is Z-up, with the underside at Z=0. The `Trophy` component contains
-Base, Stand, Volleyball, one connected white Writing body, and four red Year
-bodies. A hidden backing connects the base letters; their anchors and the year
-anchors occupy matching pockets, avoiding overlapping black/white material.
+- A continuous metallic-bronze tapered base, 88 × 64 mm at the bottom and
+  76 × 52 mm at the top.
+- Raised white lettering: `Myriam Howard` (7 mm tall) and `2026 Valley Catholic`.
+- A black hourglass stand with a 120° decorative twist.
+- A fine black volleyball net across the center stand, with two posts on the
+  base, 0.8 mm strands, and a gentle 1.5 mm wave.
+- A white volleyball with raised medium blue `#6` on its front.
 
-Edit `PLAYER_NAME`, then rerun. Export **Trophy → Save As Mesh → 3MF → Millimeter
-→ One File**. In Bambu Studio, import all bodies as one multipart object and
-assign black to Base and Stand; assign white to Volleyball and Writing; assign red to
-the four Year digits. This version uses three filament colors. Configure the H2D and supports in Bambu Studio before slicing.
+The base uses a metallic bronze appearance in Fusion. Use metallic bronze
+filament for the printed finish. This design uses four filament colors. All white base letters
+are one connected body. The net and its two posts form another connected body.
+Matching passages in the stand avoid overlapping net/stand volumes.
 
-The script logs stages and exceptions to `Trophy.log` beside the Python file.
-Prototype version is tracked in `Trophy.manifest` and recorded in the log.
-The script creates the Fusion model; export 3MF manually from Fusion. It creates
-no assets, exports, or tests folders and requires no helper scripts.
+Edit `PLAYER_NAME` and `PLAYER_NUMBER` (currently `"#6"`) if needed, then rerun. Right-click **Trophy → Save As Mesh**,
+choose **3MF → Millimeter → One File**, and save as `Trophy.3mf`. In Bambu Studio,
+import all bodies as one multipart object. Assign metallic bronze to Base; black to Stand
+and Net and Posts; white to Volleyball and Writing; medium blue to the Number characters.
+Configure your H2D, filaments, and supports, then slice and inspect the result.
+
+The script only creates the Fusion model. It does not automatically export,
+create assets/exports/tests folders, or require helper scripts. Revised geometry
+must be validated by running in Fusion and inspecting the manual 3MF export.

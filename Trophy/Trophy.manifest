@@ -3,9 +3,9 @@
   "type": "script",
   "author": "",
   "description": {
-    "": "Volleyball trophy prototype: tapered base, twisted hourglass stand, raised white lettering and raised red year. Manual Fusion 3MF export."
+    "": "Volleyball trophy prototype: metallic-bronze tapered base, Myriam Howard and 2026 Valley Catholic lettering, twisted hourglass stand, black net and posts, raised medium blue #6 on ball. Manual Fusion 3MF export."
   },
-  "version": "2.0.1",
+  "version": "3.0.1",
   "runOnStartup": false,
   "supportedOS": "windows|mac"
 }

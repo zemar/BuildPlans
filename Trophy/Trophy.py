@@ -15,6 +15,7 @@ import adsk.fusion
 
 
 PLAYER_NAME = "Myriam Howard"  # Change this and rerun for each player.
+PLAYER_NUMBER = "#6"  # Raised medium blue lettering on the volleyball.
 FONT_NAME = "Arial"
 TOTAL_HEIGHT_MM = 127.0
 BALL_RADIUS_MM = 25.0
@@ -63,6 +64,30 @@ def filament_appearance(design, seed, name, rgb):
             prop.value = color
             return appearance
     raise RuntimeError('Could not set filament appearance: ' + name)
+
+
+def bronze_appearance(design):
+    """Copy a metallic library appearance so the base has metal reflectance."""
+    candidates = []
+    for library in adsk.core.Application.get().materialLibraries:
+        for appearance in library.appearances:
+            name = appearance.name.lower()
+            if 'bronze' in name:
+                candidates.append((0, appearance))
+            elif 'copper' in name or 'brass' in name:
+                candidates.append((1, appearance))
+            elif appearance.appearanceProperties.itemById('metal_f0'):
+                candidates.append((2, appearance))
+    if not candidates:
+        raise RuntimeError("No metallic appearance found in Fusion's material libraries.")
+    _, source = min(candidates, key=lambda item: item[0])
+    appearance = design.appearances.addByCopy(source, 'Filament - Metallic Bronze')
+    tint = adsk.core.ColorProperty.cast(appearance.appearanceProperties.itemById('metal_f0'))
+    if tint:
+        if tint.hasConnectedTexture:
+            tint.hasConnectedTexture = False
+        tint.value = adsk.core.Color.create(181, 125, 62, 255)
+    return appearance
 
 
 def vector(x, y, z):
@@ -305,7 +330,7 @@ def join_writing(root, manager, base, glyphs):
         raise RuntimeError("Hidden writing backing did not create its base pocket.")
     if root.bRepBodies.count != 4 or backing.lumps.count != 1 or base.lumps.count != 1:
         raise RuntimeError('Writing or base contains disconnected material after backing construction.')
-    base.name = 'Base - Black'
+    base.name = 'Base - Metallic Bronze'
     backing.name = 'Writing - White'
     write_run_log('WRITING JOIN OK: {} glyph bodies connected with a hidden 0.6 mm plate.'
                   .format(len(glyphs)))
@@ -372,15 +397,16 @@ def twisted_stand(root, manager):
     return shape
 
 
-def ball_year(root, manager, ball, center):
-    """Raised red digits clipped to concentric spheres, attached to the ball."""
+def ball_number(root, manager, ball, center):
+    """Raised medium blue digits clipped to concentric spheres, attached to the ball."""
     sketch = root.sketches.add(root.xYConstructionPlane)
-    sketch.name = "Volleyball year 2026"
+    number = PLAYER_NUMBER.strip()
+    sketch.name = "Volleyball player number " + number
     texts = sketch.sketchTexts
     if hasattr(texts, 'createInput3'):
-        text_input = texts.createInput3("'2026'", adsk.core.ValueInput.createByReal(0.7))
+        text_input = texts.createInput3("'" + number + "'", adsk.core.ValueInput.createByReal(0.7))
     else:
-        text_input = texts.createInput2('2026', 0.7)
+        text_input = texts.createInput2(number, 0.7)
     text_input.fontName = FONT_NAME
     text_input.isHorizontalFlip = False
     text_input.isVerticalFlip = False
@@ -394,8 +420,8 @@ def ball_year(root, manager, ball, center):
         adsk.core.ValueInput.createByReal(1.2)), adsk.fusion.ExtentDirections.NegativeExtentDirection)
     feature = root.features.extrudeFeatures.add(extrusion)
     glyphs = list(feature.bodies)
-    if len(glyphs) != 4:
-        raise RuntimeError("2026 must create four digit solids.")
+    if not glyphs:
+        raise RuntimeError("No raised lettering generated for player number " + number)
     placement = adsk.core.Matrix3D.create()
     placement.setToRotation(math.pi / 2, vector(1, 0, 0), point(0, 0, 0))
     placement.translation = vector(0, -(BALL_RADIUS_MM + RAISED_TEXT_MM + 0.2) / 10, 0)
@@ -407,13 +433,13 @@ def ball_year(root, manager, ball, center):
         shape = manager.copy(glyph)
         glyph.deleteMe()
         if not manager.transform(shape, placement):
-            raise RuntimeError("Could not position volleyball year.")
-        boolean(manager, shape, outside, adsk.fusion.BooleanTypes.IntersectionBooleanType, "curved year outside")
-        boolean(manager, shape, inside, adsk.fusion.BooleanTypes.DifferenceBooleanType, "curved year inside")
+            raise RuntimeError("Could not position volleyball player number.")
+        boolean(manager, shape, outside, adsk.fusion.BooleanTypes.IntersectionBooleanType, "curved number outside")
+        boolean(manager, shape, inside, adsk.fusion.BooleanTypes.DifferenceBooleanType, "curved number inside")
         # Preserve the digit's embedded anchor and trim the white ball around it.
         # Replace through a feature cut so the original ball reference survives.
         digit = root.bRepBodies.add(shape)
-        digit.name = "Year 2026 - Red - {:02d}".format(index)
+        digit.name = "Number {} - Medium Blue - {:02d}".format(number, index)
         tools = adsk.core.ObjectCollection.create()
         tools.add(digit)
         cut = root.features.combineFeatures.createInput(ball, tools)
@@ -421,13 +447,59 @@ def ball_year(root, manager, ball, center):
         cut.isKeepToolBodies = True
         root.features.combineFeatures.add(cut)
         if not digit.isSolid or digit.lumps.count != 1:
-            raise RuntimeError("Year digit is not a connected solid.")
+            raise RuntimeError("Number character is not a connected solid.")
         digits.append(digit)
     if not ball.isSolid or ball.lumps.count != 1:
-        raise RuntimeError("Year lettering disconnected the white ball.")
+        raise RuntimeError("Player number lettering disconnected the white ball.")
     sketch.isVisible = False
-    write_run_log("YEAR OK: four curved raised red digits on the volleyball front.")
+    write_run_log("NUMBER OK: {!r}; {} curved raised medium blue bodies on the volleyball front."
+                  .format(number, len(digits)))
     return digits
+
+
+def volleyball_net(manager):
+    """Fine connected weave with a gentle front/back wave between posts."""
+    union = adsk.fusion.BooleanTypes.UnionBooleanType
+    net = manager.createCylinderOrCone(point(-31, 0, 30), 0.18,
+                                       point(-31, 0, 72), 0.18)
+    # The wave returns to Y=0 at both posts and crosses the center stand.
+    # Sample at half the mesh spacing so each vertical strand meets a joint.
+    samples = [(x, 1.5 * math.sin(2 * math.pi * index / 32))
+               for index in range(33) for x in (-31 + index * 62 / 32,)]
+
+    def add_wavy_row(z, radius):
+        # Build the row independently. Joining individual segments into an
+        # existing grid creates tangent/coincident faces at strand crossings.
+        # Slightly larger junctions keep the segment connections overlapping.
+        x, y = samples[0]
+        row = manager.createSphere(point(x, y, z), (radius + 0.06) / 10)
+        for index in range(32):
+            x0, y0 = samples[index]
+            x1, y1 = samples[index + 1]
+            strand = manager.createCylinderOrCone(point(x0, y0, z), radius / 10,
+                                                  point(x1, y1, z), radius / 10)
+            boolean(manager, row, strand, union,
+                    "net row {:.2f} segment {}".format(z, index))
+            joint = manager.createSphere(point(x1, y1, z), (radius + 0.06) / 10)
+            boolean(manager, row, joint, union, "overlapping net joint")
+        boolean(manager, net, row, union, "complete net row {:.2f}".format(z))
+        adsk.doEvents()
+
+    add_wavy_row(70, 0.65)
+    right_post = manager.createCylinderOrCone(point(31, 0, 30), 0.18,
+                                              point(31, 0, 72), 0.18)
+    boolean(manager, net, right_post, union, "right net post")
+    add_wavy_row(44, 0.65)
+    for index in range(1, 8):
+        add_wavy_row(44 + index * 3.25, 0.4)
+    # 3.875 x 3.25 mm mesh, with 0.8 mm diameter strands.
+    for index in range(2, 32, 2):
+        x, y = samples[index]
+        strand = manager.createCylinderOrCone(point(x, y, 44), 0.04,
+                                              point(x, y, 70), 0.04)
+        boolean(manager, net, strand, union, "fine vertical net strand")
+    write_run_log("NET OK: 3.875 x 3.25 mm weave; 0.8 mm strands; 1.5 mm wave amplitude.")
+    return net
 
 
 def run(context):
@@ -444,6 +516,9 @@ def run(context):
         app = adsk.core.Application.get()
         ui = app.userInterface
         name = PLAYER_NAME.strip()
+        number = PLAYER_NUMBER.strip()
+        if not number.startswith("#") or not number[1:].isascii() or not number[1:].isdigit() or len(number) > 4:
+            raise ValueError("PLAYER_NUMBER must be # followed by 1–3 digits, such as #6.")
         if not name or len(name) > 24 or any(c in name for c in "\r\n"):
             raise ValueError("PLAYER_NAME must contain 1–24 characters on one line.")
         app.documents.add(adsk.core.DocumentTypes.FusionDesignDocumentType)
@@ -470,8 +545,13 @@ def run(context):
         # the stand, so two filaments never compete for the same volume.
         boolean(manager, stand_shape, ball_shape,
                 adsk.fusion.BooleanTypes.DifferenceBooleanType, "ball seat in stand")
+        stage = "black volleyball net and posts through stand"
+        write_run_log("STAGE: " + stage)
+        net_shape = volleyball_net(manager)
+        boolean(manager, stand_shape, net_shape,
+                adsk.fusion.BooleanTypes.DifferenceBooleanType, "net passage through stand")
         base = root.bRepBodies.add(base_shape)
-        base.name = "Base - Black"
+        base.name = "Base - Metallic Bronze"
         stand = root.bRepBodies.add(stand_shape)
         stand.name = "Stand - Black"
         ball = root.bRepBodies.add(ball_shape)
@@ -479,21 +559,21 @@ def run(context):
 
         stage = "raised white lettering on tapered base"
         write_run_log("STAGE: " + stage)
-        name_height = min(5.0, 74.0 / (max(len(name), 1) * 0.95))
+        name_height = min(7.0, 74.0 / (max(len(name), 1) * 0.62))
         lettering = []
-        lettering.extend(inlay_line(root, base, "Player name", name, 20, 28, name_height))
+        lettering.extend(inlay_line(root, base, "Player name", name, 15, 28, name_height))
         lettering.extend(inlay_line(root, base, "Organization line 1",
-                                    "Valley Catholic", 12.5, 19.5, 3.8))
-        lettering.extend(inlay_line(root, base, "Organization line 2",
-                                    "Catholic Youth Organization", 5, 12, 3.5))
+                                    "2026 Valley Catholic", 5, 13, 4.5))
         stage = "joining all writing into one solid"
         write_run_log("STAGE: " + stage)
         base, writing = join_writing(root, manager, base, lettering)
         lettering = [writing]
-        base.name = "Base - Black"
-        stage = "raised red year on volleyball"
+        base.name = "Base - Metallic Bronze"
+        stage = "raised medium blue player number on volleyball"
         write_run_log("STAGE: " + stage)
-        year_digits = ball_year(root, manager, ball, center)
+        number_glyphs = ball_number(root, manager, ball, center)
+        net = root.bRepBodies.add(net_shape)
+        net.name = "Net and Posts - Black"
 
         if CAD_Y_UP:
             stage = "orienting trophy Y-up, front toward +Z"
@@ -513,7 +593,7 @@ def run(context):
 
         stage = "final multipart validation"
         write_run_log("STAGE: " + stage)
-        expected_count = 3 + len(lettering) + len(year_digits)
+        expected_count = 4 + len(lettering) + len(number_glyphs)
         if root.bRepBodies.count != expected_count:
             raise RuntimeError("Expected {} separate bodies, found {}.".format(
                 expected_count, root.bRepBodies.count))
@@ -529,20 +609,22 @@ def run(context):
         if abs(height - TOTAL_HEIGHT_MM) > 0.1:
             raise RuntimeError("Unexpected overall height: {:.3f} mm".format(height))
 
-        stage = "black, white, and red filament appearances"
+        stage = "metallic bronze, black, white, and medium blue filament appearances"
         write_run_log("STAGE: " + stage)
         white = filament_appearance(design, base.appearance, 'Filament - White', (255, 255, 255))
         black = filament_appearance(design, base.appearance, 'Filament - Black', (0, 0, 0))
-        red = filament_appearance(design, base.appearance, 'Filament - Red', (255, 0, 0))
-        base.appearance = black
+        blue = filament_appearance(design, base.appearance, 'Filament - Medium Blue', (64, 128, 192))
+        bronze = bronze_appearance(design)
+        base.appearance = bronze
         stand.appearance = black
+        net.appearance = black
         ball.appearance = white
         for body in lettering:
             body.appearance = white
-        for body in year_digits:
-            body.appearance = red
-        write_run_log('COLORS: filament 1 = black (base, stand); '
-                      'filament 2 = white (volleyball, base writing); filament 3 = red (year digits).')
+        for body in number_glyphs:
+            body.appearance = blue
+        write_run_log('COLORS: metallic bronze (base); black (stand, net, posts); '
+                      'white (volleyball, base writing); medium blue (player number).')
 
         # Look toward the engraved +Z face, with +Y up.
         camera = app.activeViewport.camera
@@ -553,9 +635,9 @@ def run(context):
         app.activeViewport.camera = camera
         write_run_log(
             'SUCCESS: height={:.3f} mm; export component Trophy; '
-            '3 structural bodies + 1 white writing + {} red year digits. '
+            '4 structural bodies + 1 white writing + {} medium blue number characters. '
             'Ready for manual Fusion 3MF export. Print not verified.'
-            .format(height, len(year_digits)))
+            .format(height, len(number_glyphs)))
         if not automated:
             export_message = (
                 "Right-click Trophy > Save As Mesh.\n"
@@ -563,14 +645,14 @@ def run(context):
                 "Save as Trophy.3mf. Import all bodies as one multipart object.\n")
             ui.messageBox(
                 "Created a {:.1f} mm (5 inch) trophy for {}.\n\n".format(height, name) +
-                "Tapered base, twisted stand, raised white text and raised red 2026.\n" +
+                "Metallic-bronze base, twisted stand, black net/posts, raised name and medium blue {}.\n".format(number) +
                 ("Orientation: +Y up, engraving facing +Z.\n" if CAD_Y_UP else
                  "Orientation: +Z up, engraving facing -Y; ready for manual mesh export.\n") +
-                "Colors: BLACK base/stand; WHITE volleyball/base writing; RED year.\n"
+                "Colors: BRONZE base; BLACK stand/net/posts; WHITE ball/writing; BLUE number.\n"
                 "Save the Fusion design.\n" + export_message +
-                "Assign black, white, and red parts to the matching reels.\n"
+                "Assign metallic bronze, black, white, and medium blue parts to the matching reels.\n"
                 "Run results are saved in Trophy.log beside the script.\n\n"
-                "Change PLAYER_NAME at the top of the script and rerun for another player.",
+                "Change PLAYER_NAME and PLAYER_NUMBER at the top and rerun for another player.",
                 "Valley Catholic volleyball trophy")
     except Exception:
         message = "Trophy creation stopped during {}.\n\n{}".format(stage, traceback.format_exc())
