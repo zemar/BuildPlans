@@ -22,3 +22,19 @@ has not been physically print-tested.
 
 Only the Fusion model is generated. No helper scripts or assets, exports, or
 tests folders are created; export 3MF manually from Fusion.
+
+## OpenSCAD version
+
+`Trophy.scad` is a self-contained editable conversion of prototype 4.4.2.
+Open it in OpenSCAD, edit `PLAYER_NAME` and `PLAYER_NUMBER`, preview with F5
+and render with F6. It preserves the millimeter dimensions, Z-up orientation,
+three colors, recessed texture, grooved ball and swirling mesh geometry.
+Text metrics and tessellation differ slightly from Fusion.
+
+Use `PART` to select `base`, `stand`, `ball`, `writing`, or `number` for separate
+exports. Import the exported parts together into Bambu Studio as one multipart
+object and preserve their assembled positions. Assign the filaments manually;
+preview colors alone do not guarantee multicolor 3MF export in every OpenSCAD
+version. `Trophy.py` remains the Fusion source, and `Trophy.manifest` tracks the
+prototype version. The OpenSCAD file has not been rendered locally because
+OpenSCAD is not installed.
