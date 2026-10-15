@@ -3,8 +3,8 @@
   "type": "script",
   "author": "",
   "description": {
-    "": "Reinforced shower caddy assembly: basket, separate multicolor engraving plate, and 10 mm bolted arm frame. All dimensions in mm."
+    "": "Shower caddy with plain basket and two reinforced hook arms using open ridged sliding joints. All dimensions in mm."
   },
-  "version": "2.0.0",
+  "version": "3.0.0",
   "supportedOS": "windows|mac"
 }

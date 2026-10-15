@@ -4,9 +4,9 @@
   "id": "ee52cdc9-466b-4644-b07f-fa8f63704e87",
   "author": "Michael",
   "description": {
-    "": "Creates the Leafy Panda 5 mm ABS license plate frame, center snap joints, test coupons, and two-object H2D print layout."
+    "": "312x160mm frame, 285x135mm opening, 10mm frame corner radii, 5mm thickness, top screw tabs, and proven 50mm top-ridge bottom-open joints."
   },
-  "version": "1.0.0",
+  "version": "2.3.0",
   "runOnStartup": false,
   "supportedOS": "windows|mac",
   "editEnabled": true

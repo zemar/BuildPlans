@@ -1,44 +1,23 @@
-# Printing the three components
+# Printing the sliding-joint caddy
 
-Export components separately from Fusion. Preserve all bodies in `02 Engraving - multicolor` as parts of one object. Keep the original Fusion assembly in its assembled position; orient the exported components in Bambu Studio. No slicer settings are automatically applied by this script.
+Generate a fresh model by running `ShowerCaddy.py` in Fusion. Export the basket and each arm as separate printable objects. The existing `ShowerCaddy.3mf` is not updated by the script. If Bambu Studio offers to load only geometry from Fusion's 3MF, use that option and configure your printer and filament in Bambu Studio.
 
-## Reinforced arm frame
+## Orientation
 
-Use **Lay on Face** on the large, flat **basket-facing face containing the nut-pocket openings**. This face is model +Y, at Y=0. Both long arms and their connecting crossbar should lie along the bed, with the hooks projecting upward. Do not print this frame with its 300 mm-long arms standing upright.
+Print the basket upright, floor on the build plate, with the socket channels vertical. They are open through their bottom and top; keep support out of the sliding channels.
 
-The nominal footprint in this orientation is **259 × 300 mm**, and height is **45.5 mm**. Check your printer's usable area, exclusions and brim space. A 256 × 256 mm bed cannot fit this orientation as described; do not scale the model to force it to fit. The strengthened frame may require a larger plate or a further design split for a smaller printer.
+Print each arm on its **straight outer side face**: X=0 for the left arm and X=259 for the right arm in the Fusion assembly. This puts the long arm and hook profile parallel to the build plate. The hook itself then has no elevated bridge across its throat. The ridged tongue and seating shoulder project sideways from the arm and can require local support in this orientation. Inspect the sliced overhangs and apply manual support only beneath those projections as needed; carefully clean the mating surfaces afterward.
 
-For a 0.4 mm nozzle and 0.20 mm layers, use these starting settings:
+The former basket-facing-face-down orientation no longer applies because the new tongues project from that face. Do not print the arms standing upright as assembled: that recreates the weak layer orientation implicated in the earlier horizontal break.
 
-| Setting | Value |
-| --- | --- |
-| Filament | The selected structural PLA profile |
-| Wall loops | **6** |
-| Top/bottom shell layers | **6** |
-| General infill | **30% gyroid** |
-| Reinforced root regions | **100% infill using modifiers** |
-| Print speed mode | Standard, not Sport/Ludicrous |
-| Supports | Tree (auto), Strong, build plate only; inspect hook returns |
-| Support material and interface | Same structural PLA |
-| Top Z distance | 0.20 mm |
+The arms are mirrored parts. Print one left and one right. Keep them as separate objects for orientation rather than preserving their assembled positions on the plate.
 
-The black support setting is independent of the engraving's color filaments because the arm frame is printed separately. Inspect the sliced preview for support under elevated hook returns; avoid filling the blind bolt/nut pockets with unnecessary supports. This orientation requires much shorter supports than the former upright model.
+## Strength and fit
 
-Add two box modifiers, covering each widened arm root from its bottom through the end of the taper. In the original assembly coordinates these are:
+Retain the earlier six-wall recommendation and solid local infill at the arm roots, seating shoulders, tongues, and basket sockets. These are manual slicer settings; the Fusion script does not change your Bambu Studio profile. Select the intended PLA filament and map it to the correct AMS reel.
 
-- Left: X=0–45, Y=-10–0, Z=15–141.6.
-- Right: X=214–259, Y=-10–0, Z=15–141.6.
+Before committing to full-size parts, make a short fit sample from a common section through a tongue and socket, preserving their original scale and mating surfaces. The modeled clearance is 0.30 mm per side. The joint should slide by hand without forcing the retaining lips apart. Change `JOINT_CLEARANCE` and rerun Fusion if fit requires adjustment.
 
-Each box is **45 × 10 × 126.6 mm** in assembly coordinates. After orienting the part, position the modifiers over the corresponding root regions using the preview. Set their infill to 100%. As a simpler alternative, make the entire arm frame 100% infill; it consumes more material. Walls and solid infill alone do not establish a load rating.
+Both sockets must seat on their arm shoulders. Confirm that neither arm is partially inserted or carrying the entire basket by itself. Start with a light load and check for cracking or permanent deformation. No load rating has been established for the revised printed joint.
 
-## Basket
-
-Print with the drainage floor on the plate. Use **6 wall loops** and **6 top/bottom shell layers**. Add 100% infill modifiers over both mounting pads (X=0–45 and 214–259, Y=0–8, Z=15–91.6 in assembly coordinates). Inspect the four horizontal bolt holes, rear pad undersides and front plate recess in the slicer for local support needs. Supports are no longer needed for tall hanging arms in this print.
-
-## Engraving
-
-Print the plate with its **flat back on the bed**, colored face upward. Keep the black backing and all 54 color bodies aligned as one multipart object. Assign black, white, green, red and brown PLA by body name. A 0.20 mm layer height gives three layers of 0.6 mm-deep colored detail. The plate needs no hook supports. Repaint or correct assignments if your exported format does not retain them.
-
-## Fit and loading
-
-Test the nut/bolt fits and the engraving recess before final assembly. The frame uses four M4 × 16 bolts, four M4 nuts and four roughly 1 mm washers. Assemble with the mating faces touching. The arm bores remain closed on the glass side with this hardware. Increase the service load gradually after assembly; the redesign has no measured load rating yet.
+Attach the separately printed artwork to the plain front after printing. This script no longer generates artwork or a recess.

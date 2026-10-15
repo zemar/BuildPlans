@@ -1,0 +1,13 @@
+{
+  "autodeskProduct": "Fusion",
+  "type": "script",
+  "id": "ee52cdc9-466b-4644-b07f-fa8f63704e87",
+  "author": "Michael",
+  "description": {
+    "": "5mm license plate frame with uniform bottom bar, centered seam, 50mm top-ridge tongues and bottom-open grooves, and two-object H2D print layout."
+  },
+  "version": "2.1.0",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac",
+  "editEnabled": true
+}

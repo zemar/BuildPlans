@@ -24,6 +24,9 @@ ENGRAVE_DEPTH_MM = 1.2  # Hidden anchoring depth for contrasting base lettering.
 RAISED_TEXT_MM = 1.2
 BASE_TAPER = 0.2  # Six millimeters inward over the 30 mm base height.
 STAND_TWIST_DEGREES = 120.0
+NET_TWIST_DEGREES = 180.0  # Rotate the entire oval mesh sleeve from bottom to top.
+MESH_STRANDS_PER_DIRECTION = 16
+MESH_STRAND_DIAMETER_MM = 1.6
 # Z-up is required for direct Fusion Save As Mesh exports to slicers.
 CAD_Y_UP = False
 
@@ -64,30 +67,6 @@ def filament_appearance(design, seed, name, rgb):
             prop.value = color
             return appearance
     raise RuntimeError('Could not set filament appearance: ' + name)
-
-
-def bronze_appearance(design):
-    """Copy a metallic library appearance so the base has metal reflectance."""
-    candidates = []
-    for library in adsk.core.Application.get().materialLibraries:
-        for appearance in library.appearances:
-            name = appearance.name.lower()
-            if 'bronze' in name:
-                candidates.append((0, appearance))
-            elif 'copper' in name or 'brass' in name:
-                candidates.append((1, appearance))
-            elif appearance.appearanceProperties.itemById('metal_f0'):
-                candidates.append((2, appearance))
-    if not candidates:
-        raise RuntimeError("No metallic appearance found in Fusion's material libraries.")
-    _, source = min(candidates, key=lambda item: item[0])
-    appearance = design.appearances.addByCopy(source, 'Filament - Metallic Bronze')
-    tint = adsk.core.ColorProperty.cast(appearance.appearanceProperties.itemById('metal_f0'))
-    if tint:
-        if tint.hasConnectedTexture:
-            tint.hasConnectedTexture = False
-        tint.value = adsk.core.Color.create(181, 125, 62, 255)
-    return appearance
 
 
 def vector(x, y, z):
@@ -330,7 +309,7 @@ def join_writing(root, manager, base, glyphs):
         raise RuntimeError("Hidden writing backing did not create its base pocket.")
     if root.bRepBodies.count != 4 or backing.lumps.count != 1 or base.lumps.count != 1:
         raise RuntimeError('Writing or base contains disconnected material after backing construction.')
-    base.name = 'Base - Metallic Bronze'
+    base.name = 'Base - Medium Blue'
     backing.name = 'Writing - White'
     write_run_log('WRITING JOIN OK: {} glyph bodies connected with a hidden 0.6 mm plate.'
                   .format(len(glyphs)))
@@ -348,53 +327,86 @@ def tapered_base(manager):
     return shape
 
 
-def twisted_stand(root, manager):
-    """Loft a twisted hourglass: wide ends with a smooth central waist."""
-    loft = root.features.loftFeatures.createInput(
-        adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-    loft.isSolid = True
-    sketches, planes = [], []
-    for index in range(9):
-        fraction = index / 8
-        z = 30 + 52 * fraction
-        plane_input = root.constructionPlanes.createInput()
-        plane_input.setByOffset(root.xYConstructionPlane,
-                               adsk.core.ValueInput.createByReal(z / 10))
-        plane = root.constructionPlanes.add(plane_input)
-        planes.append(plane)
-        sketch = root.sketches.add(plane)
-        sketch.name = "Twist section {:02d}".format(index)
-        sketches.append(sketch)
-        angle = math.radians(STAND_TWIST_DEGREES * fraction)
-        # A symmetric quadratic flare keeps the waist at mid-height and
-        # opens both ends smoothly, while retaining the decorative twist.
-        flare = (2 * fraction - 1) ** 2
-        rx, ry = 7 + 7 * flare, 6 + 5 * flare
-        vertices = []
-        for corner in range(8):
-            phase = math.pi / 8 + corner * math.pi / 4
-            x, y = rx * math.cos(phase), ry * math.sin(phase)
-            vertices.append(point(x * math.cos(angle) - y * math.sin(angle),
-                                  x * math.sin(angle) + y * math.cos(angle), 0))
-        for corner in range(8):
-            sketch.sketchCurves.sketchLines.addByTwoPoints(vertices[corner], vertices[(corner + 1) % 8])
-        if sketch.profiles.count != 1:
-            raise RuntimeError("Twist section did not produce one closed profile.")
-        loft.loftSections.add(sketch.profiles.item(0))
-    feature = root.features.loftFeatures.add(loft)
-    if feature is None or feature.bodies.count != 1:
-        raise RuntimeError("Could not create the twisted stand loft.")
-    body = feature.bodies.item(0)
-    shape = manager.copy(body)
-    body.deleteMe()
-    for sketch in sketches:
-        sketch.isVisible = False
-    for plane in planes:
-        plane.isLightBulbOn = False
+def texture_base(manager, shape):
+    """Shallow diamond grooves on side/rear faces; leave the front text smooth."""
+    cut = adsk.fusion.BooleanTypes.DifferenceBooleanType
+    grooves = 0
+    # Surface parameter u runs across a face; z follows its upward taper.
+    for face, span in (('left', 22), ('right', 22), ('back', 34)):
+        def surface(u, z):
+            offset = 0.15 / math.sqrt(1 + BASE_TAPER ** 2)
+            if face == 'back':
+                return (u, 32 - BASE_TAPER * z + offset, z + BASE_TAPER * offset)
+            sign = -1 if face == 'left' else 1
+            return (sign * (44 - BASE_TAPER * z + offset), u, z + BASE_TAPER * offset)
+        for direction in (-1, 1):
+            for intercept in range(-span - 24, span + 25, 5):
+                # Clip each diagonal to a 3 mm top/bottom border and the
+                # inset face width. Crossing cuts form a fine diamond grid.
+                limits = sorted((3 + (-span - intercept) / direction,
+                                 3 + (span - intercept) / direction))
+                low, high = max(3, limits[0]), min(27, limits[1])
+                if high - low < 1:
+                    continue
+                start = surface(intercept + direction * (low - 3), low)
+                end = surface(intercept + direction * (high - 3), high)
+                tool = manager.createCylinderOrCone(point(*start), 0.05, point(*end), 0.05)
+                boolean(manager, shape, tool, cut, "{} base texture groove {}".format(face, grooves + 1))
+                grooves += 1
+        adsk.doEvents()
+    write_run_log("BASE TEXTURE OK: {} recessed diamond grooves; approximately 0.35 mm deep; smooth lettering face."
+                  .format(grooves))
+    return shape
+
+
+def mesh_stand(manager):
+    """Rolled net gathered at the waist and swirled into a corkscrew."""
+    union = adsk.fusion.BooleanTypes.UnionBooleanType
+    # A low foot anchors every rib, with a flat underside on the base.
+    lattice = manager.createCylinderOrCone(point(0, 0, 30), 1.5,
+                                           point(0, 0, 32), 1.5)
+    rib_radius = MESH_STRAND_DIAMETER_MM / 2
+    segments = 24
+    for direction in (-1, 1):
+        for strand_index in range(MESH_STRANDS_PER_DIRECTION):
+            nodes = []
+            for index in range(segments + 1):
+                fraction = index / segments
+                z = 31 + 49 * fraction
+                radius = 12.3 * (1 - 0.28 * math.sin(math.pi * fraction) ** 2)
+                angle = (2 * math.pi * strand_index / MESH_STRANDS_PER_DIRECTION + direction *
+                         math.radians(STAND_TWIST_DEGREES) * fraction)
+                # An oval envelope makes the overall twist visible, beyond
+                # the opposing helical strands that form the diamond weave.
+                x, y = 1.15 * radius * math.cos(angle), 0.70 * radius * math.sin(angle)
+                twist = math.radians(NET_TWIST_DEGREES) * fraction
+                # A small curved centerline and gathered waist give the roll
+                # a cloth-like swirl rather than a straight twisted cage.
+                bend = 1.5 * math.sin(math.pi * fraction) ** 2
+                center_x = bend * math.cos(twist)
+                center_y = bend * math.sin(twist)
+                nodes.append((center_x + x * math.cos(twist) - y * math.sin(twist),
+                              center_y + x * math.sin(twist) + y * math.cos(twist), z))
+            rib = None
+            for index in range(segments):
+                segment = manager.createCylinderOrCone(point(*nodes[index]), rib_radius / 10,
+                    point(*nodes[index + 1]), rib_radius / 10)
+                if rib is None:
+                    rib = segment
+                else:
+                    boolean(manager, rib, segment, union, "spiral rib segment")
+                # Real overlap avoids coincident faces at segment junctions.
+                joint = manager.createSphere(point(*nodes[index + 1]), (rib_radius + 0.08) / 10)
+                boolean(manager, rib, joint, union, "spiral rib joint")
+            boolean(manager, lattice, rib, union,
+                    "mesh rib {} direction {}".format(strand_index + 1, direction))
+            adsk.doEvents()
     collar = manager.createCylinderOrCone(point(0, 0, 76), 1.0,
                                          point(0, 0, 86), 1.6)
-    boolean(manager, shape, collar, adsk.fusion.BooleanTypes.UnionBooleanType, "twisted stand cradle")
-    return shape
+    boolean(manager, lattice, collar, union, "mesh stand ball cradle")
+    write_run_log("MESH STAND OK: {} crossing strands, {:.1f} mm diameter, gathered rolled-net sleeve with 180-degree corkscrew swirl."
+                  .format(2 * MESH_STRANDS_PER_DIRECTION, MESH_STRAND_DIAMETER_MM))
+    return lattice
 
 
 def ball_number(root, manager, ball, center):
@@ -457,51 +469,6 @@ def ball_number(root, manager, ball, center):
     return digits
 
 
-def volleyball_net(manager):
-    """Fine connected weave with a gentle front/back wave between posts."""
-    union = adsk.fusion.BooleanTypes.UnionBooleanType
-    net = manager.createCylinderOrCone(point(-31, 0, 30), 0.18,
-                                       point(-31, 0, 72), 0.18)
-    # The wave returns to Y=0 at both posts and crosses the center stand.
-    # Sample at half the mesh spacing so each vertical strand meets a joint.
-    samples = [(x, 1.5 * math.sin(2 * math.pi * index / 32))
-               for index in range(33) for x in (-31 + index * 62 / 32,)]
-
-    def add_wavy_row(z, radius):
-        # Build the row independently. Joining individual segments into an
-        # existing grid creates tangent/coincident faces at strand crossings.
-        # Slightly larger junctions keep the segment connections overlapping.
-        x, y = samples[0]
-        row = manager.createSphere(point(x, y, z), (radius + 0.06) / 10)
-        for index in range(32):
-            x0, y0 = samples[index]
-            x1, y1 = samples[index + 1]
-            strand = manager.createCylinderOrCone(point(x0, y0, z), radius / 10,
-                                                  point(x1, y1, z), radius / 10)
-            boolean(manager, row, strand, union,
-                    "net row {:.2f} segment {}".format(z, index))
-            joint = manager.createSphere(point(x1, y1, z), (radius + 0.06) / 10)
-            boolean(manager, row, joint, union, "overlapping net joint")
-        boolean(manager, net, row, union, "complete net row {:.2f}".format(z))
-        adsk.doEvents()
-
-    add_wavy_row(70, 0.65)
-    right_post = manager.createCylinderOrCone(point(31, 0, 30), 0.18,
-                                              point(31, 0, 72), 0.18)
-    boolean(manager, net, right_post, union, "right net post")
-    add_wavy_row(44, 0.65)
-    for index in range(1, 8):
-        add_wavy_row(44 + index * 3.25, 0.4)
-    # 3.875 x 3.25 mm mesh, with 0.8 mm diameter strands.
-    for index in range(2, 32, 2):
-        x, y = samples[index]
-        strand = manager.createCylinderOrCone(point(x, y, 44), 0.04,
-                                              point(x, y, 70), 0.04)
-        boolean(manager, net, strand, union, "fine vertical net strand")
-    write_run_log("NET OK: 3.875 x 3.25 mm weave; 0.8 mm strands; 1.5 mm wave amplitude.")
-    return net
-
-
 def run(context):
     ui = None
     automated = isinstance(context, dict) and context.get("automated", False)
@@ -532,10 +499,15 @@ def run(context):
         manager = adsk.fusion.TemporaryBRepManager.get()
         union = adsk.fusion.BooleanTypes.UnionBooleanType
 
-        stage = "separate base and stand"
+        stage = "medium blue base and open spiral mesh stand"
         write_run_log("STAGE: " + stage)
         base_shape = tapered_base(manager)
-        stand_shape = twisted_stand(root, manager)
+        stage = "recessed diamond texture on blue base"
+        write_run_log("STAGE: " + stage)
+        texture_base(manager, base_shape)
+        stage = "rolled net mesh stand"
+        write_run_log("STAGE: " + stage)
+        stand_shape = mesh_stand(manager)
 
         stage = "volleyball seams (may take a minute)"
         write_run_log("STAGE: " + stage)
@@ -545,15 +517,10 @@ def run(context):
         # the stand, so two filaments never compete for the same volume.
         boolean(manager, stand_shape, ball_shape,
                 adsk.fusion.BooleanTypes.DifferenceBooleanType, "ball seat in stand")
-        stage = "black volleyball net and posts through stand"
-        write_run_log("STAGE: " + stage)
-        net_shape = volleyball_net(manager)
-        boolean(manager, stand_shape, net_shape,
-                adsk.fusion.BooleanTypes.DifferenceBooleanType, "net passage through stand")
         base = root.bRepBodies.add(base_shape)
-        base.name = "Base - Metallic Bronze"
+        base.name = "Base - Medium Blue"
         stand = root.bRepBodies.add(stand_shape)
-        stand.name = "Stand - Black"
+        stand.name = "Mesh Stand - Black"
         ball = root.bRepBodies.add(ball_shape)
         ball.name = "Volleyball - White"
 
@@ -568,12 +535,10 @@ def run(context):
         write_run_log("STAGE: " + stage)
         base, writing = join_writing(root, manager, base, lettering)
         lettering = [writing]
-        base.name = "Base - Metallic Bronze"
+        base.name = "Base - Medium Blue"
         stage = "raised medium blue player number on volleyball"
         write_run_log("STAGE: " + stage)
         number_glyphs = ball_number(root, manager, ball, center)
-        net = root.bRepBodies.add(net_shape)
-        net.name = "Net and Posts - Black"
 
         if CAD_Y_UP:
             stage = "orienting trophy Y-up, front toward +Z"
@@ -593,7 +558,7 @@ def run(context):
 
         stage = "final multipart validation"
         write_run_log("STAGE: " + stage)
-        expected_count = 4 + len(lettering) + len(number_glyphs)
+        expected_count = 3 + len(lettering) + len(number_glyphs)
         if root.bRepBodies.count != expected_count:
             raise RuntimeError("Expected {} separate bodies, found {}.".format(
                 expected_count, root.bRepBodies.count))
@@ -609,22 +574,20 @@ def run(context):
         if abs(height - TOTAL_HEIGHT_MM) > 0.1:
             raise RuntimeError("Unexpected overall height: {:.3f} mm".format(height))
 
-        stage = "metallic bronze, black, white, and medium blue filament appearances"
+        stage = "black, white, and medium blue filament appearances"
         write_run_log("STAGE: " + stage)
         white = filament_appearance(design, base.appearance, 'Filament - White', (255, 255, 255))
         black = filament_appearance(design, base.appearance, 'Filament - Black', (0, 0, 0))
         blue = filament_appearance(design, base.appearance, 'Filament - Medium Blue', (64, 128, 192))
-        bronze = bronze_appearance(design)
-        base.appearance = bronze
+        base.appearance = blue
         stand.appearance = black
-        net.appearance = black
         ball.appearance = white
         for body in lettering:
             body.appearance = white
         for body in number_glyphs:
             body.appearance = blue
-        write_run_log('COLORS: metallic bronze (base); black (stand, net, posts); '
-                      'white (volleyball, base writing); medium blue (player number).')
+        write_run_log('COLORS: black (mesh stand); '
+                      'white (volleyball, base writing); medium blue (base, player number).')
 
         # Look toward the engraved +Z face, with +Y up.
         camera = app.activeViewport.camera
@@ -635,7 +598,7 @@ def run(context):
         app.activeViewport.camera = camera
         write_run_log(
             'SUCCESS: height={:.3f} mm; export component Trophy; '
-            '4 structural bodies + 1 white writing + {} medium blue number characters. '
+            '3 structural bodies + 1 white writing + {} medium blue number characters. '
             'Ready for manual Fusion 3MF export. Print not verified.'
             .format(height, len(number_glyphs)))
         if not automated:
@@ -645,12 +608,12 @@ def run(context):
                 "Save as Trophy.3mf. Import all bodies as one multipart object.\n")
             ui.messageBox(
                 "Created a {:.1f} mm (5 inch) trophy for {}.\n\n".format(height, name) +
-                "Metallic-bronze base, twisted stand, black net/posts, raised name and medium blue {}.\n".format(number) +
+                "Medium blue base, open spiral mesh stand, raised name and medium blue {}.\n".format(number) +
                 ("Orientation: +Y up, engraving facing +Z.\n" if CAD_Y_UP else
                  "Orientation: +Z up, engraving facing -Y; ready for manual mesh export.\n") +
-                "Colors: BRONZE base; BLACK stand/net/posts; WHITE ball/writing; BLUE number.\n"
+                "Colors: BLUE base/number; BLACK mesh stand; WHITE ball/writing.\n"
                 "Save the Fusion design.\n" + export_message +
-                "Assign metallic bronze, black, white, and medium blue parts to the matching reels.\n"
+                "Assign black, white, and medium blue parts to the matching reels.\n"
                 "Run results are saved in Trophy.log beside the script.\n\n"
                 "Change PLAYER_NAME and PLAYER_NUMBER at the top and rerun for another player.",
                 "Valley Catholic volleyball trophy")
