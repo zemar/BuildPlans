@@ -10,3 +10,4 @@
 - When asked to run a Fusion script, use:
   http://127.0.0.1:27182/mcp
 - Verify generated dimensions and appearance in Fusion.
+- Group all bodies for each printable object under one named parent component so the complete object can be selected for Save as Mesh. Preserve separate color bodies within that component.

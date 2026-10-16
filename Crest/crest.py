@@ -1,12 +1,20 @@
 """Fusion: native vector crest, 70 mm round x 2 mm, five flush colors.
 One self-contained script; embedded closed vector regions, no raster mesh.
-Run from Scripts and Add-Ins. Diagnostic sidecar: crest.log.
+Run from Scripts and Add-Ins. Export: S > Save Crest as 3MF. Log: crest.log.
 White substrate is 1.6 mm; native colored inlays fill its top 0.4 mm.
 crest.svg and mockup.png are editable/reference artwork, not runtime inputs.
 """
 from pathlib import Path
 from collections import Counter
 import base64
+from contextlib import contextmanager
+import io
+import os
+import sys
+import tempfile
+import types
+import xml.etree.ElementTree as ET
+import zipfile
 import json
 import logging
 import math
@@ -113,7 +121,9 @@ def build_design(app, regions, logger):
         raise RuntimeError('New Fusion design unavailable.')
     design.designType = adsk.fusion.DesignTypes.DirectDesignType
     design.unitsManager.distanceDisplayUnits = adsk.fusion.DistanceUnits.MillimeterDistanceUnits
-    root = design.rootComponent
+    occurrence = design.rootComponent.occurrences.addNewComponent(adsk.core.Matrix3D.create())
+    root = occurrence.component
+    root.name = 'Crest - 70 mm - Save as Mesh'
     finishes = [make_appearance(app,design,name,rgb) for name,rgb in PALETTE]
     base_sketch = root.sketches.add(root.xYConstructionPlane)
     base_sketch.name = '70 mm substrate circle'
@@ -177,6 +187,195 @@ def build_design(app, regions, logger):
     return design
 
 
+
+EXPORT_COMMAND_ID = 'BuildPlans_SaveCrest3MF'
+_EXPORT_RUNTIME = '_buildplans_crest_export_runtime'
+
+
+@contextmanager
+def export_log():
+    logger = logging.getLogger('crest.export')
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    handler = logging.FileHandler(LOG_PATH,encoding='utf-8')
+    handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
+    logger.addHandler(handler)
+    try:
+        yield logger
+    except Exception:
+        logger.exception('Multipart 3MF export failed')
+        raise
+    finally:
+        logger.removeHandler(handler)
+        handler.close()
+
+
+def package_multipart_3mf(source, destination):
+    """Preserve Fusion meshes/materials; group all build items in one assembly.
+
+    Fusion's regular Save as Mesh may emit one build item per color body.
+    This wrapper is the packaging verified with Bambu Studio. It does not
+    scale, reposition, merge, or recolor any mesh.
+    """
+    core = 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'
+    ns = {'c':core}
+    q = lambda name: '{'+core+'}'+name
+    source,destination = Path(source),Path(destination)
+    with zipfile.ZipFile(source) as archive:
+        model_data = archive.read('3D/3dmodel.model')
+        for _,item in ET.iterparse(io.BytesIO(model_data),events=('start-ns',)):
+            prefix,uri = item
+            # ElementTree reserves ns0, ns1, etc. for generated prefixes.
+            if prefix.startswith('ns') and prefix[2:].isdigit():
+                prefix = 'crestns'+prefix[2:]
+            ET.register_namespace(prefix,uri)
+        model = ET.fromstring(model_data)
+        if model.get('unit','millimeter') != 'millimeter':
+            raise ValueError('Expected millimeter export; refusing to guess a scale.')
+        resources,build = model.find('c:resources',ns),model.find('c:build',ns)
+        if resources is None or build is None or len(build)==0:
+            raise ValueError('Export contains no printable crest objects.')
+        items = list(build)
+        objects = {o.get('id'):o for o in resources.findall('c:object',ns)}
+        if any(item.get('objectid') not in objects for item in items):
+            raise ValueError('3MF build references missing objects.')
+        assembly_id = str(max(int(e.get('id')) for e in resources if e.get('id'))+1)
+        assembly = ET.SubElement(resources,q('object'),{
+            'id':assembly_id,'type':'model','name':'Crest - 70 mm - five-color multipart object'})
+        components = ET.SubElement(assembly,q('components'))
+        for item in items:
+            attrs = {'objectid':item.get('objectid')}
+            if item.get('transform'):
+                attrs['transform'] = item.get('transform')
+            ET.SubElement(components,q('component'),attrs)
+            build.remove(item)
+        ET.SubElement(build,q('item'),{'objectid':assembly_id})
+        updated = ET.tostring(model,encoding='utf-8',xml_declaration=True)
+        # Atomic replacement leaves a previous export intact on failures.
+        with tempfile.NamedTemporaryFile(prefix='.crest-',suffix='.3mf',
+                                         dir=str(destination.parent),delete=False) as staging:
+            staged = Path(staging.name)
+        try:
+            with zipfile.ZipFile(staged,'w',zipfile.ZIP_DEFLATED) as output:
+                for member in archive.infolist():
+                    output.writestr(member,updated if member.filename=='3D/3dmodel.model'
+                                    else archive.read(member.filename))
+            with zipfile.ZipFile(staged) as check:
+                if check.testzip() is not None:
+                    raise ValueError('3MF archive validation failed.')
+                result = ET.fromstring(check.read('3D/3dmodel.model'))
+                if len(result.findall('c:build/c:item',ns))!=1:
+                    raise ValueError('Expected one assembled print object.')
+            os.replace(staged,destination)
+        finally:
+            staged.unlink(missing_ok=True)
+    return {'build_objects':1,'parts':len(items),'unit':'millimeter'}
+
+
+def find_crest_component(design):
+    candidates = [o.component for o in design.rootComponent.allOccurrences
+                  if o.component.name=='Crest - 70 mm - Save as Mesh']
+    if len(candidates)!=1:
+        raise RuntimeError('Activate the crest design containing one Crest - 70 mm - Save as Mesh component.')
+    return candidates[0]
+
+
+def export_multipart_3mf(app, destination):
+    import adsk.fusion
+    design = adsk.fusion.Design.cast(app.activeProduct)
+    if not design:
+        raise RuntimeError('Activate the Fusion crest design first.')
+    crest = find_crest_component(design)
+    box = crest.preciseBoundingBox
+    sizes = [(getattr(box.maxPoint,a)-getattr(box.minPoint,a))*10 for a in ('x','y','z')]
+    if any(abs(a-b)>1e-4 for a,b in zip(sizes,[70.,70.,2.])):
+        raise ValueError('Unexpected crest dimensions: '+str(sizes))
+    destination = Path(destination).with_suffix('.3mf')
+    with export_log() as logger:
+        with tempfile.TemporaryDirectory(prefix='crest-export-') as directory:
+            raw = Path(directory)/'fusion.3mf'
+            options = design.exportManager.createC3MFExportOptions(crest,str(raw))
+            options.isOneFilePerBody = False
+            options.sendToPrintUtility = False
+            options.meshRefinement = adsk.fusion.MeshRefinementSettings.MeshRefinementHigh
+            if not design.exportManager.execute(options) or not raw.is_file():
+                raise RuntimeError('Fusion 3MF export failed.')
+            stats = package_multipart_3mf(raw,destination)
+        logger.info('EXPORTED %s: %s; bounds=%s mm; native bodies=%d',
+                    destination,stats,sizes,crest.bRepBodies.count)
+    return destination
+
+
+def install_export_command(app):
+    """Provide a session command, also searchable through Fusion's S menu."""
+    import adsk.core
+    ui = app.userInterface
+    panel = ui.allToolbarPanels.itemById('SolidScriptsAddinsPanel')
+    if panel:
+        old_control = panel.controls.itemById(EXPORT_COMMAND_ID)
+        if old_control:
+            old_control.deleteMe()
+    old_definition = ui.commandDefinitions.itemById(EXPORT_COMMAND_ID)
+    if old_definition:
+        old_definition.deleteMe()
+    runtime = types.ModuleType(_EXPORT_RUNTIME)
+    runtime.handlers = []
+    sys.modules[_EXPORT_RUNTIME] = runtime
+
+    class ExportExecute(adsk.core.CommandEventHandler):
+        def notify(self,args):
+            try:
+                import adsk.fusion
+                design = adsk.fusion.Design.cast(app.activeProduct)
+                if not design:
+                    raise RuntimeError('Activate the crest design first.')
+                find_crest_component(design)
+                dialog = ui.createFileDialog()
+                dialog.title = 'Save Crest as 3MF - multipart for Bambu Studio'
+                dialog.filter = '3MF files (*.3mf)'
+                dialog.initialDirectory = str(ROOT)
+                dialog.initialFilename = 'crest-bambu.3mf'
+                if dialog.showSave()!=adsk.core.DialogResults.DialogOK:
+                    return
+                path = export_multipart_3mf(app,dialog.filename)
+                ui.messageBox('Saved one multipart crest with all color parts aligned.\n'+str(path))
+            except Exception as exc:
+                with export_log() as logger:
+                    logger.exception('Save Crest as 3MF command failed')
+                ui.messageBox('Crest export failed: '+str(exc)+'\nLog: '+str(LOG_PATH))
+
+    class ExportCreated(adsk.core.CommandCreatedEventHandler):
+        def notify(self,args):
+            execute = ExportExecute()
+            args.command.execute.add(execute)
+            runtime.handlers.append(execute)
+
+    definition = ui.commandDefinitions.addButtonDefinition(
+        EXPORT_COMMAND_ID,'Save Crest as 3MF',
+        'Save the entire crest as one multipart 3MF in millimeters for Bambu Studio.')
+    created = ExportCreated()
+    definition.commandCreated.add(created)
+    runtime.handlers.append(created)
+    if panel:
+        control = panel.controls.addCommand(definition)
+        control.isPromoted = True
+    return definition
+
+
+def stop(context):
+    import adsk.core
+    app = adsk.core.Application.get()
+    panel = app.userInterface.allToolbarPanels.itemById('SolidScriptsAddinsPanel')
+    if panel:
+        control = panel.controls.itemById(EXPORT_COMMAND_ID)
+        if control:
+            control.deleteMe()
+    definition = app.userInterface.commandDefinitions.itemById(EXPORT_COMMAND_ID)
+    if definition:
+        definition.deleteMe()
+    sys.modules.pop(_EXPORT_RUNTIME,None)
+
+
 def run(context):
     logger = logging.getLogger('crest')
     logger.setLevel(logging.INFO)
@@ -199,8 +398,13 @@ def run(context):
         logger.info('Fusion=%s; vector regions=%d; colors=%s',app.version,len(regions),
                     dict(Counter(r['color'] for r in regions)))
         design = build_design(app,regions,logger)
+        install_export_command(app)
+        if context != 'mcp':
+            import adsk
+            adsk.autoTerminate(False)
         notify = print if context=='mcp' else app.userInterface.messageBox
         notify('Created native vector crest: 70 mm round x 2 mm, five flush colors.\n'
+               'Press S and choose Save Crest as 3MF for the multipart packaging verified in Bambu Studio.\n'
                'Closed sketches and solid color inlays are editable in Fusion.\nLog: '+str(LOG_PATH))
     except Exception:
         logger.exception('Vector crest creation failed')
