@@ -65,7 +65,7 @@ def start_log():
     formatter.converter = time.gmtime
     handler.setFormatter(formatter)
     LOGGER.addHandler(handler)
-    LOGGER.info('=== RUN START; v2.2 rounded-outlines-millimeter-3mf; UTC; script=%s ===', __file__)
+    LOGGER.info('=== RUN START; v2.3 three-object-bambu-export; UTC; script=%s ===', __file__)
 
 
 def close_log():
@@ -576,7 +576,7 @@ def solid_mesh(body):
 
 
 def export_print_objects(panel,feet,decorations):
-    """Write three 3MF files: one build object per file, explicit millimeter units.
+    """Write three component 3MFs and one complete three-object 3MF, in millimeters.
 
     The plaque is a single multipart object so all three colors stay registered.
     The feet lie on their broad sides; the plaque lies on its back, face upward.
@@ -593,8 +593,8 @@ def export_print_objects(panel,feet,decorations):
         c,t = math.cos(a),math.sin(a)
         z -= THICKNESS_MM*t
         return x,y*c-z*t,y*t+z*c
-    objects = [('MyriSaying', [('Black plaque','Black',solid_mesh(panel))]+decorations)]
-    objects += [('MyriSaying_'+side+'Foot',[(side+' foot','Black',solid_mesh(foot))])
+    objects = [('plaque', [('Black plaque','Black',solid_mesh(panel))]+decorations)]
+    objects += [(side.lower()+'_foot',[(side+' foot','Black',solid_mesh(foot))])
                 for side,foot in zip(('Left','Right'),feet)]
     for object_index,(name,parts) in enumerate(objects):
         prepared = []
@@ -655,6 +655,74 @@ def export_print_objects(panel,feet,decorations):
         pending.replace(path)
         LOGGER.info('3MF VERIFIED %s: one build object, %s color parts, dimensions=%s mm',
                     path.name,len(parts),dimensions)
+
+    combine_print_objects()
+
+
+def combine_print_objects():
+    """One import file with three independent build objects, never five color bodies."""
+    import copy
+    import zipfile
+    import xml.etree.ElementTree as ET
+    ns = 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'
+    q = lambda tag: '{'+ns+'}'+tag
+    root = ET.Element(q('model'),unit='millimeter')
+    ET.SubElement(root,q('metadata'),name='Title').text = 'MyriSaying - plaque and two feet'
+    resources = ET.SubElement(root,q('resources'))
+    build = ET.SubElement(root,q('build'))
+    next_id = 1
+    for filename,label,x,y in [('plaque.3mf','Plaque',10,10),
+                               ('left_foot.3mf','Left foot',10,120),
+                               ('right_foot.3mf','Right foot',85,120)]:
+        with zipfile.ZipFile(HERE/filename) as archive:
+            source = ET.fromstring(archive.read('3D/3dmodel.model'))
+        if source.get('unit') != 'millimeter':
+            raise RuntimeError('All print objects must use millimeters.')
+        source_resources = source.find(q('resources'))
+        mapping = {}
+        for resource in source_resources:
+            mapping[resource.get('id')] = str(next_id)
+            next_id += 1
+        for resource in source_resources:
+            copied = copy.deepcopy(resource)
+            for node in copied.iter():
+                for key in ('id','objectid','pid'):
+                    if key in node.attrib:
+                        node.set(key,mapping[node.get(key)])
+            resources.append(copied)
+        items = source.findall(q('build')+'/'+q('item'))
+        if len(items) != 1:
+            raise RuntimeError(filename+' must have exactly one complete object.')
+        object_id = mapping[items[0].get('objectid')]
+        parent = next(o for o in resources if o.get('id') == object_id)
+        parent.set('name',label)
+        ET.SubElement(build,q('item'),objectid=object_id,
+                      transform='1 0 0 0 1 0 0 0 1 {} {} 0'.format(x,y))
+    if len(build)!=3:
+        raise RuntimeError('Complete export must contain plaque, left foot, and right foot.')
+    path = HERE/'MyriSaying.3mf'
+    pending = path.with_suffix('.3mf.tmp')
+    with zipfile.ZipFile(HERE/'plaque.3mf') as template:
+        with zipfile.ZipFile(pending,'w',zipfile.ZIP_DEFLATED) as archive:
+            for entry in template.namelist():
+                archive.writestr(entry,ET.tostring(root,encoding='utf-8',xml_declaration=True)
+                                 if entry=='3D/3dmodel.model' else template.read(entry))
+    with zipfile.ZipFile(pending) as archive:
+        check = ET.fromstring(archive.read('3D/3dmodel.model'))
+    items = check.findall(q('build')+'/'+q('item'))
+    resources_by_id = {resource.get('id'):resource
+                       for resource in check.findall(q('resources')+'/'+q('object'))}
+    expected = [('Plaque',3),('Left foot',1),('Right foot',1)]
+    if check.get('unit') != 'millimeter' or len(items) != len(expected):
+        raise RuntimeError('Complete 3MF must contain three millimeter build objects.')
+    for item,(name,part_count) in zip(items,expected):
+        obj = resources_by_id.get(item.get('objectid'))
+        components = obj.find(q('components')) if obj is not None else None
+        if obj is None or obj.get('name') != name or components is None or len(components) != part_count:
+            raise RuntimeError('Complete 3MF has incorrect object or color-part grouping.')
+    pending.replace(path)
+    LOGGER.info('3MF COMPLETE VERIFIED: MyriSaying.3mf; millimeter units; '
+                'three build objects: Plaque (3 color parts), Left foot, Right foot.')
 
 
 def run(context):
@@ -753,7 +821,8 @@ def run(context):
                 '15-degree backward lean. Open ridged T joints, 0.3 mm clearance per side.\n'
                 'Slide each tongue into the plaque from the bottom until it meets the upper stop.\n\n'
                 'Select Plaque, Left foot, or Right foot for Save as Mesh (millimeters).\n'
-                'Three ready-to-import 3MF files are saved beside this script.\n'
+                'Open MyriSaying.3mf in Bambu Studio: one plaque object and two feet.\n'
+                'Individual files: plaque.3mf, left_foot.3mf, right_foot.3mf.\n'
                 'Save the new Fusion design.\n\nLog: '+str(LOG_PATH),'MyriSaying')
         print('MyriSaying verified: 200 x 100 x 15 mm; feet 15 mm; lean 15 degrees; '
               'three printable components; mockup saved.')

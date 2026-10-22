@@ -3,9 +3,9 @@
   "type": "script",
   "author": "",
   "description": {
-    "": "Self-contained Fusion script: 200 x 100 x 15 mm black plaque, brown rope frame, white cursive and two 15 mm black feet using the exact CamelandPanda open T joint profile and rail length, seated at 15 degrees. Three printable components, log sidecar and current mockup. R7 outer corners and three millimeter 3MF files; plaque exported as one multipart object."
+    "": "Self-contained Fusion script: 200 x 100 x 15 mm black plaque, brown rope frame, white cursive and two 15 mm black feet using the exact CamelandPanda open T joint profile and rail length, seated at 15 degrees. Three printable components, log sidecar and current mockup. R7 outer corners; 3MF export contains one multipart plaque object and two separate foot objects."
   },
-  "version": "2.2.0",
+  "version": "2.3.0",
   "runOnStartup": false,
   "supportedOS": "windows|mac"
 }
