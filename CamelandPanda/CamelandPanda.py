@@ -3,8 +3,7 @@ Self-contained artwork, five separate material colors, white rear feet.
 Run in Fusion; select the named parent component for Save as Mesh.
 """
 from pathlib import Path
-from collections import Counter
-import base64, json, logging, math, struct, tempfile, time, traceback, zipfile, zlib
+import base64, json, logging, math, time, traceback, zlib
 WIDTH_MM=200.0
 HEIGHT_MM=150.0
 TOTAL_THICKNESS_MM=10.0
@@ -12,11 +11,19 @@ INLAY_THICKNESS_MM=0.4
 BASE_EDGE_RADIUS_MM=3.0
 ANGLE_DEG=15.0
 CHANNEL_CENTERS=(50.0,150.0)
-CHANNEL_START=10.0
+CHANNEL_START=-1.0
 CHANNEL_END=75.0
-CHANNEL_DEPTH=3.0
+FOOT_WIDTH_MM=15.0
+TONGUE_NECK_MM=11.0
+TONGUE_HEAD_MM=15.0
+TONGUE_STEP_MM=1.5
+TONGUE_DEPTH_MM=3.6
+JOINT_CLEARANCE_MM=.30
+JOINT_RADIUS_MM=.40
+RAIL_START_MM=5.0
+RAIL_END_MM=CHANNEL_END
+WEB_BACK_CLEARANCE_MM=.4
 FOOT_TOP_EDGE_RADIUS_MM=.5
-DOVETAIL_DEPTH_MM=2.9
 PALETTE=(('White',(255,255,255)),('Black',(0,0,0)),('Brown',(151,87,33)),('Red',(210,25,35)),('Green',(112,166,40)))
 ROOT=Path(__file__).resolve().parent
 LOG_PATH=ROOT/'CamelandPanda.log'
@@ -44,25 +51,6 @@ def make_appearance(app, design, name, rgb):
             prop.value = adsk.core.Color.create(*rgb,255)
             return finish
     raise RuntimeError('Appearance has no editable base color: '+name)
-
-def triangulate(poly):
-    """Ear clipping for a simple CCW 2D polygon."""
-    def cross(a,b,c):
-        return (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0])
-    ids=list(range(len(poly))); out=[]
-    while len(ids)>3:
-        for k,b in enumerate(ids):
-            a,c=ids[k-1],ids[(k+1)%len(ids)]
-            if cross(poly[a],poly[b],poly[c]) <= 1e-10:
-                continue
-            if any(all(cross(poly[u],poly[v],poly[q])>=-1e-10
-                       for u,v in ((a,b),(b,c),(c,a)))
-                   for q in ids if q not in (a,b,c)):
-                continue
-            out.append((a,b,c)); ids.pop(k); break
-        else:
-            raise ValueError('Cannot triangulate foot profile.')
-    out.append(tuple(ids)); return out
 
 def round_profile_corners(poly, corner_indices, radius, segments=8):
     """Replace selected convex profile corners with sampled circular arcs."""
@@ -113,124 +101,96 @@ def round_profile_corners(poly, corner_indices, radius, segments=8):
     return rounded, tangent_distances
 
 def table_height(base=10.0, radius=3.0):
-    """Lowest point of the plaque's sampled lower round-over at a 15° lean.
-
-    Retain the original conservative rear-foot contact height. The rear
-    grooves start above this edge and the artwork does not reach the margin.
-    """
+    """Exact tabletop support height of the rounded lower edge at 15 degrees."""
     angle=math.radians(ANGLE_DEG)
-    samples=[]
-    for z in (0.,radius*.5,radius,base-radius,base-radius*.5,base):
-        cy=radius
-        cz=max(radius,min(z,base-radius))
-        dy,dz=-cy,z-cz
-        length=math.hypot(dy,dz)
-        y=cy+dy*radius/length
-        rz=cz+dz*radius/length
-        samples.append(y*math.cos(angle)+rz*math.sin(angle))
-    return min(samples)
+    return radius*(math.cos(angle)+math.sin(angle)-1)
 
-def foot_triangles(center=0.0, base=10.0, radius=3.0):
-    angle=math.radians(ANGLE_DEG); co,si=math.cos(angle),math.sin(angle)
-    def yz(height, rear):
-        return (height*co+rear*si, height*si-rear*co)
-    # Rear-only sole on the SAME tabletop plane as the plaque's bottom edge.
-    # The web sits against the plaque back at Z=0; only the dovetail enters it.
-    ground=table_height(base,radius)
-    profile=[(74.7,0.0),(35.3,0.0),yz(ground+4,8),
-             yz(ground,8),yz(ground,65),yz(ground+4,65),(74.7,-4)]
-    profile, top_tangents=round_profile_corners(
-        profile,(0,1),FOOT_TOP_EDGE_RADIUS_MM)
-    area=sum(a[0]*b[1]-b[0]*a[1] for a,b in zip(profile,profile[1:]+profile[:1]))
-    if area<0: profile.reverse()
-    rail_start=35.3+top_tangents[1]
-    rail_end=74.7-top_tangents[0]
-    def vertex(side,i): return (center+side*2.7,*profile[i])
-    triangles=[]
-    for a,b,c in triangulate(profile):
-        triangles.extend([(vertex(1,a),vertex(1,b),vertex(1,c)),
-                          (vertex(-1,c),vertex(-1,b),vertex(-1,a))])
-    for i,a in enumerate(profile):
-        j=(i+1)%len(profile); b=profile[j]
-        if a[1]==b[1]==0.0:
-            continue  # Internal web-to-dovetail contact face.
-        triangles.extend([(vertex(-1,i),vertex(1,j),vertex(1,i)),
-                          (vertex(-1,i),vertex(-1,j),vertex(1,j))])
-    # XZ rail cross-section CCW, bottom edge omitted to join web.
-    rail=[(-2.7,0.0),(2.7,0.0),(2.7,.3),(3.7,DOVETAIL_DEPTH_MM),
-          (-3.7,DOVETAIL_DEPTH_MM),(-2.7,.3)]
-    def rv(y,i): return (center+rail[i][0],y,rail[i][1])
-    for a,b,c in triangulate(rail):
-        triangles.extend([(rv(rail_start,a),rv(rail_start,b),rv(rail_start,c)),
-                          (rv(rail_end,c),rv(rail_end,b),rv(rail_end,a))])
-    for i in range(1,len(rail)):
-        j=(i+1)%len(rail)
-        triangles.extend([(rv(rail_start,i),rv(rail_end,i),rv(rail_end,j)),
-                          (rv(rail_start,i),rv(rail_end,j),rv(rail_start,j))])
-    return triangles
+def joint_outline(center, clearance=0.0):
+    """ShowerCaddy's open T section, sized for this plaque (mm in X/Z).
 
-def write_import_mesh(path, records, palette):
-    """Create one temporary 3MF directly from (triangle, color-index) records.
-
-    Colors use the same surface-colorgroup representation confirmed in Fusion.
-    Face records are spooled to disk to avoid a second full mesh in memory.
+    Continuous longitudinal ridges are captured behind the rear lips.
+    The neck stays open to the back; there are no teeth or loading bays.
     """
-    vertices={}
-    counts=Counter()
-    face_record=struct.Struct('<IIIB')
-    with tempfile.TemporaryFile() as faces:
-        for triangle,color in records:
-            if not 0 <= color < len(palette):
-                raise ValueError('Invalid mesh color index.')
-            indices=[]
-            for vertex in triangle:
-                if vertex not in vertices:
-                    vertices[vertex]=len(vertices)
-                indices.append(vertices[vertex])
-            faces.write(face_record.pack(*indices,color))
-            counts[color]+=1
-        with zipfile.ZipFile(path,'w',zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr('[Content_Types].xml',
-                '<?xml version="1.0" encoding="UTF-8"?>'
-                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-                '<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>'
-                '</Types>')
-            archive.writestr('_rels/.rels',
-                '<?xml version="1.0" encoding="UTF-8"?>'
-                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                '<Relationship Id="rel0" Target="/3D/3dmodel.model" '
-                'Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>'
-                '</Relationships>')
-            with archive.open('3D/3dmodel.model','w') as model:
-                def emit(text): model.write(text.encode('utf-8'))
-                emit('<?xml version="1.0" encoding="UTF-8"?>'
-                     '<model unit="millimeter" xml:lang="en-US" '
-                     'xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" '
-                     'xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02" '
-                     'requiredextensions="m"><resources><m:colorgroup id="1">')
-                for _,rgb in palette:
-                    emit('<m:color color="#'+''.join('%02X'%v for v in rgb)+'FF"/>')
-                emit('</m:colorgroup><object id="2" type="model" pid="1" pindex="0">'
-                     '<mesh><vertices>')
-                for v in vertices:
-                    emit('<vertex x="%.8f" y="%.8f" z="%.8f"/>'%v)
-                emit('</vertices><triangles>')
-                faces.seek(0)
-                while True:
-                    data=faces.read(face_record.size)
-                    if not data: break
-                    a,b,c,color=face_record.unpack(data)
-                    emit('<triangle v1="%d" v2="%d" v3="%d" pid="1" '
-                         'p1="%d" p2="%d" p3="%d"/>'%(a,b,c,color,color,color))
-                emit('</triangles></mesh></object></resources>'
-                     '<build><item objectid="2"/></build></model>')
-    return {'vertices':len(vertices),'triangles':sum(counts.values()),
-            'color_faces':{palette[i][0]:n for i,n in sorted(counts.items())}}
+    n=TONGUE_NECK_MM/2+clearance
+    h=TONGUE_HEAD_MM/2+clearance
+    step=TONGUE_STEP_MM-clearance
+    depth=TONGUE_DEPTH_MM+clearance
+    return [(center-n,-1),(center+n,-1),(center+n,step),
+            (center+h,step),(center+h,depth),(center-h,depth),
+            (center-h,step),(center-n,step)]
 
-def configure_display(body):
-    body.displayOverrides.isSuppressFaceGroupColors=True
-    body.displayOverrides.isSuppressTriangleEdges=True
+def joint_prism(component, name, center, y0, y1, clearance, operation):
+    """Extrude the same rounded T profile along the entire sliding direction."""
+    import adsk.core, adsk.fusion
+    point=adsk.core.Point3D.create
+    value=adsk.core.ValueInput.createByReal
+    pi=component.constructionPlanes.createInput()
+    normal_y=component.xZConstructionPlane.geometry.normal.y
+    pi.setByOffset(component.xZConstructionPlane,value(y0/(10*normal_y)))
+    plane=component.constructionPlanes.add(pi)
+    sketch=component.sketches.add(plane);sketch.name=name
+    def p(x,z):return sketch.modelToSketchSpace(point(x/10,y0/10,z/10))
+    vertices=joint_outline(center,clearance);corners=[]
+    # Same tangent arc construction and 0.4 mm corner radius as ShowerCaddy.
+    radius=JOINT_RADIUS_MM
+    for i,v in enumerate(vertices):
+        prev,nxt=vertices[i-1],vertices[(i+1)%len(vertices)]
+        u=(prev[0]-v[0],prev[1]-v[1]);w=(nxt[0]-v[0],nxt[1]-v[1])
+        lu,lw=math.hypot(*u),math.hypot(*w)
+        assert min(lu,lw)>2*radius
+        u=tuple(a/lu for a in u);w=tuple(a/lw for a in w)
+        a=(v[0]+u[0]*radius,v[1]+u[1]*radius)
+        b=(v[0]+w[0]*radius,v[1]+w[1]*radius)
+        q=radius*(1-1/math.sqrt(2))
+        mid=(v[0]+(u[0]+w[0])*q,v[1]+(u[1]+w[1])*q)
+        corners.append((a,mid,b))
+    for i,(a,mid,b) in enumerate(corners):
+        sketch.sketchCurves.sketchArcs.addByThreePoints(p(*a),p(*mid),p(*b))
+        sketch.sketchCurves.sketchLines.addByTwoPoints(p(*b),p(*corners[(i+1)%len(corners)][0]))
+    assert sketch.profiles.count==1,name
+    feature=component.features.extrudeFeatures.addSimple(sketch.profiles.item(0),value((y1-y0)/(10*normal_y)),operation)
+    feature.name=name
+    if feature.errorOrWarningMessage:
+        raise RuntimeError(name+": "+feature.errorOrWarningMessage)
+    sketch.isVisible=False;plane.isLightBulbOn=False
+    return feature
+
+def build_foot(component,center,finish,logger):
+    """One native white solid: 15 mm web, rear-only sole, and ridged T tongue."""
+    import adsk.core, adsk.fusion
+    angle=math.radians(ANGLE_DEG);co,si=math.cos(angle),math.sin(angle)
+    def yz(height,rear):return (height*co+rear*si,height*si-rear*co)
+    ground=table_height(TOTAL_THICKNESS_MM,BASE_EDGE_RADIUS_MM)
+    profile=[(RAIL_END_MM,-WEB_BACK_CLEARANCE_MM),(RAIL_START_MM,-WEB_BACK_CLEARANCE_MM),
+             yz(ground+4,8),yz(ground,8),yz(ground,65),yz(ground+4,65),(RAIL_END_MM,-4)]
+    profile,_=round_profile_corners(profile,(0,1),FOOT_TOP_EDGE_RADIUS_MM)
+    point=adsk.core.Point3D.create;value=adsk.core.ValueInput.createByReal
+    pi=component.constructionPlanes.createInput()
+    normal_x=component.yZConstructionPlane.geometry.normal.x
+    pi.setByOffset(component.yZConstructionPlane,value((center-FOOT_WIDTH_MM/2)/(10*normal_x)))
+    plane=component.constructionPlanes.add(pi);sketch=component.sketches.add(plane)
+    sketch.name='15 mm rear support web and tabletop sole'
+    pts=[sketch.modelToSketchSpace(point((center-FOOT_WIDTH_MM/2)/10,y/10,z/10)) for y,z in profile]
+    for a,b in zip(pts,pts[1:]+pts[:1]):sketch.sketchCurves.sketchLines.addByTwoPoints(a,b)
+    ex=component.features.extrudeFeatures
+    web=ex.addSimple(sketch.profiles.item(0),value(FOOT_WIDTH_MM/(10*normal_x)),adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    sketch.isVisible=False;plane.isLightBulbOn=False
+    joint_prism(component,'Continuous ridged sliding tongue',center,RAIL_START_MM,RAIL_END_MM,0,
+                adsk.fusion.FeatureOperations.JoinFeatureOperation)
+    assert component.bRepBodies.count==1
+    body=component.bRepBodies.item(0);body.name='White 15 mm rear foot with ridged tongue';body.appearance=finish
+    assert body.isSolid
+    bb=body.preciseBoundingBox
+    assert abs((bb.maxPoint.x-bb.minPoint.x)*10-FOOT_WIDTH_MM)<1e-5
+    assert abs(bb.maxPoint.z*10-TONGUE_DEPTH_MM)<1e-5
+    assert abs(bb.maxPoint.y*10-CHANNEL_END)<1e-5
+    # The sole is behind the plaque and on the exact same support plane.
+    for rear in (8,65):
+        y,z=yz(ground,rear)
+        assert z<0 and abs(y*co+z*si-ground)<1e-9
+    logger.info('VERIFIED foot: width=%.2f mm, single white native solid, tongue %.2f/%.2f x %.2f mm; clearance %.2f mm per side; rear-only sole at %.6f mm support height',
+                FOOT_WIDTH_MM,TONGUE_NECK_MM,TONGUE_HEAD_MM,TONGUE_DEPTH_MM,JOINT_CLEARANCE_MM,ground)
+    return body
 
 def draw_ring(sketch, ring):
     import adsk.core
@@ -303,21 +263,14 @@ def build_design(app, regions, logger):
     plaque.features.filletFeatures.add(fillet)
     base.name='White sand-textured base with flush inlay pockets'
     base.appearance=finishes[0]
-    # Rear dovetail slots: a 6 mm mouth and 8 mm floor, with a 9 mm loading bay.
+    # Uniform open-back T grooves, extending beyond the lower edge so feet
+    # slide in from the bottom. The closed upper end provides the seating stop.
     for center in CHANNEL_CENTERS:
-        plane_input=plaque.constructionPlanes.createInput()
-        plane_input.setByOffset(plaque.xZConstructionPlane,value(-CHANNEL_START/10))
-        plane=plaque.constructionPlanes.add(plane_input)
-        slot=plaque.sketches.add(plane)
-        coords=[(center-3,0),(center+3,0),(center+4,3),(center-4,3)]
-        pts=[slot.modelToSketchSpace(point(x/10,CHANNEL_START/10,z/10)) for x,z in coords]
-        for a,b in zip(pts,pts[1:]+pts[:1]):slot.sketchCurves.sketchLines.addByTwoPoints(a,b)
-        ex.addSimple(slot.profiles.item(0),value(-(CHANNEL_END-CHANNEL_START)/10),cut)
-        slot.isVisible=False;plane.isLightBulbOn=False
-        entry=plaque.sketches.add(plaque.xYConstructionPlane)
-        entry.sketchCurves.sketchLines.addTwoPointRectangle(point((center-4.5)/10,1,0),point((center+4.5)/10,3.6,0))
-        ex.addSimple(entry.profiles.item(0),value(.3),cut)
-        entry.isVisible=False
+        joint_prism(plaque,'Bottom-loading open retaining groove',center,CHANNEL_START,CHANNEL_END,
+                    JOINT_CLEARANCE_MM,cut)
+    logger.info('Rear T grooves: Y %.2f..%.2f mm; constant cross-section, back open, no loading bays; head %.2f mm, neck %.2f mm, depth %.2f mm',
+                CHANNEL_START,CHANNEL_END,TONGUE_HEAD_MM+2*JOINT_CLEARANCE_MM,
+                TONGUE_NECK_MM+2*JOINT_CLEARANCE_MM,TONGUE_DEPTH_MM+JOINT_CLEARANCE_MM)
     # Irregularly scattered, varied shallow spherical caps suggest fine sand.
     # Embedded positions keep every dimple clear of the artwork and round-over.
     tm=adsk.fusion.TemporaryBRepManager.get()
@@ -391,15 +344,18 @@ def build_design(app, regions, logger):
             bb=b.preciseBoundingBox
             assert abs(bb.maxPoint.z*10-10)<1e-5 and abs(bb.minPoint.z*10-9.6)<1e-5,b.name
     logger.info('VERIFIED plaque: dimensions=%s mm; volume=%.6f; %d native solids; all inlays Z=9.6..10 mm',size,volume,plaque.bRepBodies.count)
-    with tempfile.TemporaryDirectory(prefix='CamelandPanda-feet-') as folder:
-        for number,center in enumerate(CHANNEL_CENTERS,1):
-            foot=component('White rear foot %d - Save as Mesh'%number)
-            path=Path(folder)/'foot.3mf'
-            write_import_mesh(path,((t,0) for t in foot_triangles(center,TOTAL_THICKNESS_MM,BASE_EDGE_RADIUS_MM)),[PALETTE[0]])
-            meshes=foot.meshBodies.add(str(path),adsk.fusion.MeshUnits.MillimeterMeshUnit)
-            assert meshes.count==1
-            body=meshes.item(0);body.name='White rear foot %d'%number
-            body.appearance=finishes[0];configure_display(body)
+    for number,center in enumerate(CHANNEL_CENTERS,1):
+        foot=component('White rear foot %d - Save as Mesh'%number)
+        body=build_foot(foot,center,finishes[0],logger)
+        # Check bottom insertion at several positions, including fully withdrawn.
+        for offset in (0,-10,-35,-70,-80):
+            sample=tm.copy(body)
+            shift=adsk.core.Matrix3D.create()
+            shift.translation=adsk.core.Vector3D.create(0,offset/10,0)
+            assert tm.transform(sample,shift)
+            assert tm.booleanOperation(sample,tm.copy(base),adsk.fusion.BooleanTypes.IntersectionBooleanType)
+            assert sample.faces.count==0,('Foot/plaque collision',number,offset)
+        logger.info('VERIFIED foot %d: collision-free bottom insertion at offsets 0, -10, -35, -70 and -80 mm',number)
     cam=app.activeViewport.camera
     cam.eye=point(10,7.5,60);cam.target=point(10,7.5,0)
     cam.upVector=adsk.core.Vector3D.create(0,1,0)
@@ -420,7 +376,10 @@ def run(context):
         app=adsk.core.Application.get()
         logger.info('RUN START: flush-vector-v3; exact Crest central vectors at 2x; five colors; no relief')
         build_design(app,load_vectors(),logger)
-        message='Created 200 x 150 x 10 mm flush vector plaque and two white rear feet. Select each named parent component for Save as Mesh. Log: '+str(LOG_PATH)
+        message=('Created 200 x 150 x 10 mm flush vector plaque and two white rear feet. '
+                 'Save the named Plaque parent component as 3MF, Structure: One File. '
+                 'If the slicer asks to load a single object with multiple parts, choose Yes '
+                 'to preserve the color inlay positions. Export each foot separately. Log: '+str(LOG_PATH))
         if context=='mcp':print(message)
         else:app.userInterface.messageBox(message)
     except Exception:

@@ -136,27 +136,44 @@ def volleyball(manager, center):
                 boolean(manager, ball, seam, cut, "panel boundary")
                 adsk.doEvents()
 
-    # Two small-circle arcs within each of the six dominant-axis cells.
+    # Explicit spherical arcs avoid clipped torus sectors silently missing
+    # a hemisphere. Each of the six cells receives two complete stripe cuts.
+    stripe_count = 0
     for axis in range(3):
         stripe_axis = (axis + 1) % 3
-        remaining = [i for i in range(3) if i != axis]
+        other_axis = 3 - axis - stripe_axis
         for side in (-1, 1):
             for offset in (-7.0, 7.0):
-                ring_center = list(center)
-                ring_center[stripe_axis] += offset
-                normal = [0, 0, 0]
-                normal[stripe_axis] = 1
-                seam = manager.createTorus(
-                    point(*ring_center), vector(*normal),
-                    math.sqrt(r * r - offset * offset) / 10,
-                    SEAM_RADIUS_MM / 10)
-                for other in remaining:
-                    for sign in (-1, 1):
-                        limit = [0, 0, 0]
-                        limit[axis], limit[other] = side, sign
-                        clip_halfspace(manager, seam, limit, center)
-                boolean(manager, ball, seam, cut, "panel stripe")
+                ring_radius = math.sqrt(r * r - offset * offset)
+                nodes = []
+                for index in range(33):
+                    angle = -math.pi / 4 + index * math.pi / 64
+                    coordinates = list(center)
+                    coordinates[axis] += side * ring_radius * math.cos(angle)
+                    coordinates[other_axis] += ring_radius * math.sin(angle)
+                    coordinates[stripe_axis] += offset
+                    nodes.append(coordinates)
+                groove = manager.createSphere(point(*nodes[0]), (SEAM_RADIUS_MM + 0.02) / 10)
+                for index in range(32):
+                    segment = manager.createCylinderOrCone(point(*nodes[index]), SEAM_RADIUS_MM / 10,
+                        point(*nodes[index + 1]), SEAM_RADIUS_MM / 10)
+                    boolean(manager, groove, segment, adsk.fusion.BooleanTypes.UnionBooleanType,
+                            "panel stripe arc segment")
+                    joint = manager.createSphere(point(*nodes[index + 1]), (SEAM_RADIUS_MM + 0.02) / 10)
+                    boolean(manager, groove, joint, adsk.fusion.BooleanTypes.UnionBooleanType,
+                            "panel stripe arc joint")
+                volume_before = ball.volume
+                boolean(manager, ball, groove, cut, "complete panel stripe")
+                removed = (volume_before - ball.volume) * 1000
+                if removed < 0.01:
+                    raise RuntimeError("Missing volleyball stripe: axis {}, side {}, offset {}"
+                                       .format(axis, side, offset))
+                stripe_count += 1
+                write_run_log("PANEL STRIPE OK: axis={}, side={}, offset={}; removed={:.3f} mm^3"
+                              .format(axis, side, offset, removed))
                 adsk.doEvents()
+    if stripe_count != 12:
+        raise RuntimeError("Volleyball requires two stripe grooves in each of six panel groups.")
 
     # Tilt the panels for a more natural presentation.
     rotation = adsk.core.Matrix3D.create()

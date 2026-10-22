@@ -1,7 +1,7 @@
 """Self-contained Autodesk Fusion script: run from Scripts and Add-Ins.
 
 Uses Fusion and the Python standard library; cursive geometry is embedded below.
-Coordinates in millimeters: X right, +Y rearward, +Z up; panel leans back 10 degrees.
+Coordinates in millimeters: X right, +Y rearward, +Z up; panel leans back 15 degrees.
 """
 import base64
 import hashlib
@@ -17,16 +17,30 @@ LOG_PATH = HERE / 'MyriSaying.log'
 LOGGER = logging.getLogger('MyriSaying')
 WIDTH_MM = 200.0
 HEIGHT_MM = 100.0
-THICKNESS_MM = 3.0
+THICKNESS_MM = 15.0
 FRAME_MM = 6.0
+OUTER_RADIUS_MM = 7.0  # Outline corners; sliding joint edges retain their 0.4 mm radius.
 RAISED_MM = 1.2
-LEAN_DEGREES = 10.0
+LEAN_DEGREES = 15.0
 ROPE_STRAND_RADIUS_MM = 1.65
 ROPE_TWIST_RADIUS_MM = 0.85
 ROPE_PITCH_MM = 10.0
-FOOT_WIDTH_MM = 8.0
-FOOT_DEPTH_MM = 40.0
-FOOT_HEIGHT_MM = 65.0
+FOOT_WIDTH_MM = 15.0  # Constant left-to-right thickness of each separate foot.
+FOOT_DEPTH_MM = 65.0  # Rear sole extent from the plaque's rear bottom edge.
+FOOT_SOLE_FRONT_MM = 8.0
+FOOT_SOLE_THICKNESS_MM = 4.0
+FOOT_HEIGHT_MM = 75.0  # CamelandPanda CHANNEL_END / RAIL_END, along the plaque.
+FRAME_BACKING_MM = 2.0  # Brown front inlay; black structure continues behind it.
+# Exact CamelandPanda.py joint dimensions, copied here to stay self-contained.
+TONGUE_NECK_MM = 11.0
+TONGUE_HEAD_MM = 15.0
+TONGUE_STEP_MM = 1.5
+TONGUE_DEPTH_MM = 3.6
+JOINT_CLEARANCE_MM = 0.30  # Per mating face, not diametral.
+JOINT_RADIUS_MM = 0.40
+RAIL_START_MM = 5.0
+WEB_BACK_CLEARANCE_MM = 0.40
+FOOT_TOP_EDGE_RADIUS_MM = 0.50
 FOOT_CENTERS_MM = (-65.0, 65.0)
 FONT_NAME = 'Snell Roundhand Bold'
 # Text, visible outline height, center height. All values are millimeters.
@@ -51,7 +65,7 @@ def start_log():
     formatter.converter = time.gmtime
     handler.setFormatter(formatter)
     LOGGER.addHandler(handler)
-    LOGGER.info('=== RUN START; UTC; script=%s ===', __file__)
+    LOGGER.info('=== RUN START; v2.2 rounded-outlines-millimeter-3mf; UTC; script=%s ===', __file__)
 
 
 def close_log():
@@ -107,35 +121,50 @@ def rope_frame():
     and closes the underside, avoiding coincident/intersecting mesh shells.
     """
     w,h,f = WIDTH_MM/2, HEIGHT_MM, FRAME_MM
-    outside = [(-w,0),(w,0),(w,h),(-w,h)]
-    inside = [(-w+f,f),(w-f,f),(w-f,h-f),(-w+f,h-f)]
-    lengths = [WIDTH_MM-f, HEIGHT_MM-f]*2
-    perimeter = sum(lengths)
-    turns = max(1, round(perimeter/ROPE_PITCH_MM))
+    r = OUTER_RADIUS_MM
+    # Outer R7 and inner R1 share centers; the rope remains a constant 6 mm band.
+    stations = []
+    traveled = 0.0
+    for cx,cz,start,straight in [(w-r,r,-90,WIDTH_MM-2*r),
+                               (w-r,h-r,0,HEIGHT_MM-2*r),
+                               (-w+r,h-r,90,WIDTH_MM-2*r),
+                               (-w+r,r,180,HEIGHT_MM-2*r)]:
+        angle = math.radians(start)
+        nx,nz = math.cos(angle),math.sin(angle)
+        tx,tz = -nz,nx
+        steps = math.ceil(straight/.65)
+        for k in range(steps):
+            distance = -straight+straight*k/steps
+            stations.append(((cx+r*nx+distance*tx,cz+r*nz+distance*tz),
+                             (cx+(r-f)*nx+distance*tx,cz+(r-f)*nz+distance*tz),
+                             traveled+straight*k/steps))
+        traveled += straight
+        arc_length = math.pi/2*(r-f/2)
+        steps = max(16,math.ceil(arc_length/.3))
+        for k in range(steps):
+            angle = math.radians(start+90*k/steps)
+            nx,nz = math.cos(angle),math.sin(angle)
+            stations.append(((cx+r*nx,cz+r*nz),(cx+(r-f)*nx,cz+(r-f)*nz),
+                             traveled+arc_length*k/steps))
+        traveled += arc_length
+    perimeter = traveled
+    turns = max(1,round(perimeter/ROPE_PITCH_MM))
     points, relief, faces = [], [], []
     cross_steps = 24
-    traveled = 0
-    for edge,length in enumerate(lengths):
-        nxt = (edge+1)%4
-        steps = math.ceil(length/0.65)
-        for step in range(steps):
-            t = step/steps
-            outer = [outside[edge][k]*(1-t)+outside[nxt][k]*t for k in (0,1)]
-            inner = [inside[edge][k]*(1-t)+inside[nxt][k]*t for k in (0,1)]
-            phase = 2*math.pi*turns*(traveled+length*t)/perimeter
-            for j in range(cross_steps+1):
-                u = j/cross_steps
-                points.append(tuple(outer[k]*(1-u)+inner[k]*u for k in (0,1)))
-                across = (u-.5)*f
-                height = 0.0
-                for sign in (-1,1):
-                    center_u = sign*ROPE_TWIST_RADIUS_MM*math.cos(phase)
-                    center_h = sign*ROPE_TWIST_RADIUS_MM*math.sin(phase)
-                    radicand = ROPE_STRAND_RADIUS_MM**2-(across-center_u)**2
-                    if radicand > 0:
-                        height = max(height, center_h+math.sqrt(radicand))
-                relief.append(height)
-        traveled += length
+    for outer,inner,distance in stations:
+        phase = 2*math.pi*turns*distance/perimeter
+        for j in range(cross_steps+1):
+            u = j/cross_steps
+            points.append(tuple(outer[k]*(1-u)+inner[k]*u for k in (0,1)))
+            across = (u-.5)*f
+            height = 0.0
+            for sign in (-1,1):
+                center_u = sign*ROPE_TWIST_RADIUS_MM*math.cos(phase)
+                center_h = sign*ROPE_TWIST_RADIUS_MM*math.sin(phase)
+                radicand = ROPE_STRAND_RADIUS_MM**2-(across-center_u)**2
+                if radicand > 0:
+                    height = max(height, center_h+math.sqrt(radicand))
+            relief.append(height)
     stride = cross_steps+1
     stations = len(points)//stride
     for i in range(stations):
@@ -143,8 +172,8 @@ def rope_frame():
         for j in range(cross_steps):
             a,b,c,d = i*stride+j,nxt*stride+j,nxt*stride+j+1,i*stride+j+1
             faces.extend(((a,b,c),(a,c,d)))
-    vertices, triangles = extrude(points, faces, THICKNESS_MM,
-                                  lambda u,v,t: (u,THICKNESS_MM-t,v))
+    vertices, triangles = extrude(points, faces, FRAME_BACKING_MM,
+                                  lambda u,v,t: (u,FRAME_BACKING_MM-t,v))
     count = len(points)
     for i,value in enumerate(relief):
         x,y,z = vertices[count+i]
@@ -181,30 +210,25 @@ def build():
                 FOOT_WIDTH_MM, FOOT_DEPTH_MM, FOOT_HEIGHT_MM)
     LOGGER.info('Font outlines: %s; sha256=%s', data['font'],
                 hashlib.sha256(lettering_bytes).hexdigest())
-    w, h, f, d = WIDTH_MM/2, HEIGHT_MM, FRAME_MM, THICKNESS_MM
-    # (u,v,height) -> (u,-height,v) is a proper rotation. Extrude toward viewer.
-    panel_map = lambda u, v, t: (u, d-t, v)
-    panel = extrude(*rect(-w+f, f, w-f, h-f), d, panel_map)
-    parts = [('Plaque - Black', 'Black', panel),
-             ('Twisted rope frame - Brown', 'Brown', rope_frame())]
+    if not (FRAME_BACKING_MM < THICKNESS_MM-TONGUE_DEPTH_MM-JOINT_CLEARANCE_MM
+            and 0 < TONGUE_NECK_MM < TONGUE_HEAD_MM <= FOOT_WIDTH_MM
+            and 2*JOINT_RADIUS_MM < TONGUE_STEP_MM-JOINT_CLEARANCE_MM
+            and TONGUE_STEP_MM+JOINT_CLEARANCE_MM < TONGUE_DEPTH_MM
+            and 0 < RAIL_START_MM < FOOT_HEIGHT_MM < HEIGHT_MM-FRAME_MM
+            and 0 < WEB_BACK_CLEARANCE_MM < 1
+            and FOOT_SOLE_FRONT_MM < FOOT_DEPTH_MM):
+        raise ValueError('Incompatible tongue, retaining lip, foot, or backing dimensions.')
     writing = extrude(data['vertices'], data['faces'], RAISED_MM,
                       lambda u, v, t: (u, -t, v))
-    parts.append(('Writing - White', 'White', writing))
+    parts = [('Twisted rope frame - Brown', 'Brown', rope_frame()),
+             ('Writing - White', 'White', writing)]
     parts = [(name,color,([lean(p) for p in mesh[0]],mesh[1]))
              for name,color,mesh in parts]
-    angle = math.radians(LEAN_DEGREES)
-    rear_bottom = d*math.cos(angle)
-    for label, x in zip(('Left', 'Right'), FOOT_CENTERS_MM):
-        # A slanted front edge meets the tilted back; the foot stays on Z=0.
-        triangle = [(rear_bottom,0), (rear_bottom+FOOT_DEPTH_MM,0),
-                    (rear_bottom+FOOT_HEIGHT_MM*math.sin(angle),
-                     FOOT_HEIGHT_MM*math.cos(angle))]
-        foot = extrude(triangle, [(0, 1, 2)], FOOT_WIDTH_MM,
-                       lambda u, v, t, x=x: (x-FOOT_WIDTH_MM/2+t, u, v))
-        parts.append((label+' support - Black', 'Black', foot))
-    LOGGER.info('Design: black panel, brown twisted-rope frame, white cursive; '
-                'backward lean=%s degrees; rope radius=%s, orbit=%s, pitch~%s mm',
-                LEAN_DEGREES,ROPE_STRAND_RADIUS_MM,ROPE_TWIST_RADIUS_MM,ROPE_PITCH_MM)
+    LOGGER.info('Design: 15 mm black panel, brown rope frame, white cursive; '
+                'backward lean=%s degrees; two %s mm separate black feet; '
+                'open T grooves; neck/head/depth=%s/%s/%s; per-side clearance=%s mm',
+                LEAN_DEGREES,FOOT_WIDTH_MM,TONGUE_NECK_MM,TONGUE_HEAD_MM,
+                TONGUE_DEPTH_MM,JOINT_CLEARANCE_MM)
     return parts, data
 
 
@@ -237,32 +261,21 @@ def audit(mesh):
 
 
 def generate():
+    """Validate the decorative meshes; structural solids are made natively in Fusion."""
     parts, _ = build()
-    reports = {name: audit(mesh) for name, color, mesh in parts}
-    total_volume = sum(r['volume_mm3'] for r in reports.values())
-    com = [sum(r['volume_mm3']*r['center_of_mass_mm'][i] for r in reports.values())/total_volume
-           for i in range(3)]
-    rear_bottom = THICKNESS_MM*math.cos(math.radians(LEAN_DEGREES))
-    if not (min(FOOT_CENTERS_MM) < com[0] < max(FOOT_CENTERS_MM)
-            and rear_bottom < com[1] < rear_bottom+FOOT_DEPTH_MM):
-        raise ValueError('Center of mass is outside the support footprint.')
-    all_points = [p for _,_,mesh in parts for p in mesh[0]]
-    overall = [max(p[i] for p in all_points)-min(p[i] for p in all_points) for i in range(3)]
-    reports['assembly'] = {'center_of_mass_mm_equal_density': com,
-        'static_stability_check': 'inside support footprint (equal-density solid model)',
-        'panel_dimensions_mm': [WIDTH_MM, HEIGHT_MM, THICKNESS_MM],
-        'overall_xyz_mm': overall, 'backward_lean_degrees': LEAN_DEGREES,
-        'text': [line[0] for line in LINES], 'font': FONT_NAME,
-        'fusion_execution_verified': False, 'physical_print_verified': False}
     for name, color, mesh in parts:
-        LOGGER.info('PART %s: color=%s; validation=%s', name, color, reports[name])
-    LOGGER.info('ASSEMBLY VALIDATION: %s', reports['assembly'])
-    LOGGER.info('Geometry validated in memory; creating five Fusion mesh bodies.')
+        LOGGER.info('DECORATION %s: color=%s; validation=%s', name, color, audit(mesh))
     return parts
 
 
 def appearance(design, seed, name, rgba):
     import adsk.core
+    # Use opaque matte plastic, not the new solid's default metallic finish.
+    library = adsk.core.Application.get().materialLibraries.itemById(
+        'BA5EE55E-9982-449B-9D66-9F036540E140')
+    matte = library.appearances.itemById('Prism-129') if library else None
+    if matte:
+        seed = matte
     rgb = tuple(int(rgba[i:i+2], 16) for i in (1, 3, 5))
     color = adsk.core.Color.create(*rgb, 255)
     result = design.appearances.addByCopy(seed, 'MyriSaying - '+name)
@@ -276,59 +289,481 @@ def appearance(design, seed, name, rgba):
     raise RuntimeError('Could not apply the '+name+' appearance.')
 
 
+def point_mm(x, y, z):
+    import adsk.core
+    return adsk.core.Point3D.create(x/10, y/10, z/10)
+
+
+def native_box(manager, x0, y0, z0, x1, y1, z1):
+    import adsk.core
+    bounds = adsk.core.OrientedBoundingBox3D.create(
+        point_mm((x0+x1)/2, (y0+y1)/2, (z0+z1)/2),
+        adsk.core.Vector3D.create(1,0,0), adsk.core.Vector3D.create(0,1,0),
+        (x1-x0)/10, (y1-y0)/10, (z1-z0)/10)
+    return manager.createBox(bounds)
+
+
+def joint_outline(center, clearance=0.0):
+    """Exact CamelandPanda open T section, in X / depth-in-from-back mm.
+
+    Two continuous longitudinal ridges retain the tongue behind the lips.
+    The rear neck and lower entry stay open; the upper end is a seating stop.
+    """
+    n = TONGUE_NECK_MM/2+clearance
+    h = TONGUE_HEAD_MM/2+clearance
+    step = TONGUE_STEP_MM-clearance
+    depth = TONGUE_DEPTH_MM+clearance
+    return [(center-n,-1),(center+n,-1),(center+n,step),(center+h,step),
+            (center+h,depth),(center-h,depth),(center-h,step),(center-n,step)]
+
+
+def joint_prism(component, name, center, low, high, clearance, operation):
+    import adsk.core
+    value = adsk.core.ValueInput.createByReal
+    pi = component.constructionPlanes.createInput()
+    pi.setByOffset(component.xYConstructionPlane, value(low/10))
+    plane = component.constructionPlanes.add(pi)
+    sketch = component.sketches.add(plane)
+    sketch.name = name
+    def p(x, depth):
+        return sketch.modelToSketchSpace(point_mm(x,THICKNESS_MM-depth,low))
+    vertices = joint_outline(center, clearance)
+    corners = []
+    for i,v in enumerate(vertices):
+        previous,following = vertices[i-1],vertices[(i+1)%len(vertices)]
+        u = (previous[0]-v[0],previous[1]-v[1])
+        w = (following[0]-v[0],following[1]-v[1])
+        lu,lw = math.hypot(*u),math.hypot(*w)
+        if min(lu,lw) <= 2*JOINT_RADIUS_MM:
+            raise ValueError('Joint corner radius exceeds its profile segment.')
+        u,w = tuple(a/lu for a in u),tuple(a/lw for a in w)
+        r = JOINT_RADIUS_MM
+        a = (v[0]+u[0]*r,v[1]+u[1]*r)
+        b = (v[0]+w[0]*r,v[1]+w[1]*r)
+        q = r*(1-1/math.sqrt(2))
+        middle = (v[0]+(u[0]+w[0])*q,v[1]+(u[1]+w[1])*q)
+        corners.append((a,middle,b))
+    for i,(a,middle,b) in enumerate(corners):
+        sketch.sketchCurves.sketchArcs.addByThreePoints(p(*a),p(*middle),p(*b))
+        sketch.sketchCurves.sketchLines.addByTwoPoints(p(*b),p(*corners[(i+1)%len(corners)][0]))
+    if sketch.profiles.count != 1:
+        raise RuntimeError('Expected one closed T profile: '+name)
+    feature = component.features.extrudeFeatures.addSimple(
+        sketch.profiles.item(0),value((high-low)/10),operation)
+    if not feature or feature.errorOrWarningMessage:
+        raise RuntimeError('Failed joint extrusion: '+name)
+    feature.name = name
+    sketch.isVisible = False
+    plane.isLightBulbOn = False
+    LOGGER.info('JOINT %s: Z=%s..%s; clearance=%s mm',name,low,high,clearance)
+
+
+def rounded_box(component, x0,y0,z0,x1,y1,z1,radius):
+    """Native extruded rounded rectangle, with true circular corner faces."""
+    import adsk.core
+    import adsk.fusion
+    manager = adsk.fusion.TemporaryBRepManager.get()
+    body = component.bRepBodies.add(native_box(manager,x0,y0,z0,x1,y1,z1))
+    edges = adsk.core.ObjectCollection.create()
+    for edge in body.edges:
+        a,b = edge.startVertex.geometry,edge.endVertex.geometry
+        if abs(a.x-b.x)<1e-8 and abs(a.z-b.z)<1e-8:
+            edges.add(edge)
+    if edges.count != 4:
+        raise RuntimeError('Expected four through-thickness corner edges.')
+    fillet = component.features.filletFeatures.createInput()
+    fillet.edgeSetInputs.addConstantRadiusEdgeSet(
+        edges,adsk.core.ValueInput.createByReal(radius/10),False)
+    component.features.filletFeatures.add(fillet)
+    return body
+
+
+def build_panel(component):
+    """R7 outline with a matching R1 inner opening for the 6 mm rope border."""
+    import adsk.fusion
+    manager = adsk.fusion.TemporaryBRepManager.get()
+    w,h,f,d = WIDTH_MM/2,HEIGHT_MM,FRAME_MM,THICKNESS_MM
+    backing = rounded_box(component,-w,FRAME_BACKING_MM,0,w,d,h,OUTER_RADIUS_MM)
+    inset = rounded_box(component,-w+f,0,f,w-f,FRAME_BACKING_MM,h-f,OUTER_RADIUS_MM-f)
+    solid = manager.copy(backing)
+    if not manager.booleanOperation(solid,inset,adsk.fusion.BooleanTypes.UnionBooleanType):
+        raise RuntimeError('Could not unite the black face and rounded backing.')
+    backing.deleteMe()
+    inset.deleteMe()
+    component.bRepBodies.add(solid)
+    for center in FOOT_CENTERS_MM:
+        joint_prism(component,'Open rear groove at X='+str(center),center,-1,
+                    FOOT_HEIGHT_MM,JOINT_CLEARANCE_MM,
+                    adsk.fusion.FeatureOperations.CutFeatureOperation)
+    body = component.bRepBodies.item(0)
+    body.name = 'Plaque - Black - R7 corners - 15 mm'
+    LOGGER.info('FUSION ROUNDING: four outer R7 mm corners; inner border R1 mm; joint R0.4 mm.')
+    return body
+
+
+def round_profile_corners(poly, corner_indices, radius, segments=8):
+    """Replace selected convex profile corners with sampled circular arcs."""
+    rounded = []
+    tangent_distances = {}
+    for i, corner in enumerate(poly):
+        if i not in corner_indices:
+            rounded.append(corner)
+            continue
+        previous = poly[i-1]
+        following = poly[(i+1)%len(poly)]
+        to_previous = (previous[0]-corner[0], previous[1]-corner[1])
+        to_following = (following[0]-corner[0], following[1]-corner[1])
+        previous_length = math.hypot(*to_previous)
+        following_length = math.hypot(*to_following)
+        u = (to_previous[0]/previous_length, to_previous[1]/previous_length)
+        v = (to_following[0]/following_length, to_following[1]/following_length)
+        angle = math.acos(max(-1.0, min(1.0, u[0]*v[0]+u[1]*v[1])))
+        if not 0 < angle < math.pi:
+            raise ValueError('Foot top edge requires a convex profile corner.')
+        tangent = radius/math.tan(angle/2)
+        if tangent >= min(previous_length, following_length):
+            raise ValueError('Foot top edge radius does not fit its profile.')
+        tangent_distances[i] = tangent
+        start = (corner[0]+u[0]*tangent, corner[1]+u[1]*tangent)
+        end = (corner[0]+v[0]*tangent, corner[1]+v[1]*tangent)
+        bisector = (u[0]+v[0], u[1]+v[1])
+        bisector_length = math.hypot(*bisector)
+        center_distance = radius/math.sin(angle/2)
+        center = (corner[0]+bisector[0]/bisector_length*center_distance,
+                  corner[1]+bisector[1]/bisector_length*center_distance)
+        start_angle = math.atan2(start[1]-center[1], start[0]-center[0])
+        end_angle = math.atan2(end[1]-center[1], end[0]-center[0])
+        incoming = (corner[0]-previous[0], corner[1]-previous[1])
+        outgoing = (following[0]-corner[0], following[1]-corner[1])
+        direction = 1 if incoming[0]*outgoing[1]-incoming[1]*outgoing[0] > 0 else -1
+        sweep = (end_angle-start_angle) % (2*math.pi) if direction > 0 else -(
+            (start_angle-end_angle) % (2*math.pi))
+        for step in range(segments+1):
+            if step == 0:
+                rounded.append(start)
+            elif step == segments:
+                rounded.append(end)
+            else:
+                angle_at = start_angle+sweep*step/segments
+                rounded.append((center[0]+radius*math.cos(angle_at),
+                                center[1]+radius*math.sin(angle_at)))
+    return rounded, tangent_distances
+
+
+def build_foot(component, center):
+    """One 15 mm thick black support with a flat sole and integral ridged tongue."""
+    import adsk.core
+    import adsk.fusion
+    c,s = math.cos(math.radians(LEAN_DEGREES)),math.sin(math.radians(LEAN_DEGREES))
+    def local(ground_height,rear_distance):
+        return (THICKNESS_MM+rear_distance*c-ground_height*s,
+                ground_height*c+rear_distance*s)
+    profile = [(THICKNESS_MM+WEB_BACK_CLEARANCE_MM,FOOT_HEIGHT_MM),
+               (THICKNESS_MM+WEB_BACK_CLEARANCE_MM,RAIL_START_MM),
+               local(FOOT_SOLE_THICKNESS_MM,FOOT_SOLE_FRONT_MM),
+               local(0,FOOT_SOLE_FRONT_MM),local(0,FOOT_DEPTH_MM),
+               (THICKNESS_MM+20,FOOT_HEIGHT_MM)]
+    profile,_ = round_profile_corners(profile,(4,5),OUTER_RADIUS_MM,segments=32)
+    profile,_ = round_profile_corners(profile,(0,1),FOOT_TOP_EDGE_RADIUS_MM)
+    value = adsk.core.ValueInput.createByReal
+    x0 = center-FOOT_WIDTH_MM/2
+    normal_x = component.yZConstructionPlane.geometry.normal.x
+    pi = component.constructionPlanes.createInput()
+    pi.setByOffset(component.yZConstructionPlane,value(x0/(10*normal_x)))
+    plane = component.constructionPlanes.add(pi)
+    sketch = component.sketches.add(plane)
+    sketch.name = '15 mm foot web with flat rear sole'
+    points = [sketch.modelToSketchSpace(point_mm(x0,y,z)) for y,z in profile]
+    for a,b in zip(points,points[1:]+points[:1]):
+        sketch.sketchCurves.sketchLines.addByTwoPoints(a,b)
+    feature = component.features.extrudeFeatures.addSimple(
+        sketch.profiles.item(0),value(FOOT_WIDTH_MM/(10*normal_x)),
+        adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    if not feature or feature.errorOrWarningMessage:
+        raise RuntimeError('Could not create a solid foot web.')
+    sketch.isVisible = False
+    plane.isLightBulbOn = False
+    joint_prism(component,'Integral ridged sliding tongue',center,RAIL_START_MM,
+                FOOT_HEIGHT_MM,0,adsk.fusion.FeatureOperations.JoinFeatureOperation)
+    if component.bRepBodies.count != 1:
+        raise RuntimeError('The foot and tongue must be one solid body.')
+    body = component.bRepBodies.item(0)
+    body.name = 'Black 15 mm foot with ridged T tongue'
+    return body
+
+
+def verify_joints(panel, feet):
+    """Use Fusion's solid kernel to check clearance, insertion, stops and retention."""
+    import adsk.core
+    import adsk.fusion
+    manager = adsk.fusion.TemporaryBRepManager.get()
+    difference = adsk.fusion.BooleanTypes.DifferenceBooleanType
+    for index,foot in enumerate(feet,1):
+        if not foot.isSolid or foot.lumps.count != 1:
+            raise RuntimeError('Foot must be one connected solid.')
+        bounds = foot.preciseBoundingBox
+        if abs((bounds.maxPoint.x-bounds.minPoint.x)*10-FOOT_WIDTH_MM)>1e-5:
+            raise RuntimeError('Foot thickness does not equal the requested 15 mm.')
+        def overlap(dy=0,dz=0):
+            probe = manager.copy(foot)
+            shift = adsk.core.Matrix3D.create()
+            shift.translation = adsk.core.Vector3D.create(0,dy/10,dz/10)
+            if not manager.transform(probe,shift):
+                raise RuntimeError('Could not place the sliding-fit probe.')
+            volume = probe.volume
+            if not manager.booleanOperation(probe,panel,difference):
+                raise RuntimeError('Could not evaluate sliding-fit clearance.')
+            return (volume-probe.volume)*1000
+        insertion_positions = (0,10,30,FOOT_HEIGHT_MM-RAIL_START_MM,FOOT_HEIGHT_MM+1)
+        for distance in insertion_positions:
+            collision = overlap(dz=-distance)
+            if abs(collision)>0.001:
+                raise RuntimeError('Foot {} collides at insertion offset {}: {} mm^3'.format(
+                    index,distance,collision))
+        stop = overlap(dz=.25)
+        retention = overlap(dy=.8)
+        if stop<.01 or retention<.01:
+            raise RuntimeError('Joint must have a positive seating stop and retaining ridges.')
+        LOGGER.info('FUSION FIT PASS foot %s: no collisions at %s mm insertion; '
+                    'upper-stop overlap %.6f mm3; retaining-lip overlap %.6f mm3',
+                    index,insertion_positions,stop,retention)
+    bounds = panel.preciseBoundingBox
+    actual = [(getattr(bounds.maxPoint,a)-getattr(bounds.minPoint,a))*10 for a in ('x','y','z')]
+    if any(abs(a-b)>1e-5 for a,b in zip(actual,(WIDTH_MM,THICKNESS_MM,HEIGHT_MM))):
+        raise RuntimeError('Plaque dimensions do not match the requested stock size: '+str(actual))
+    LOGGER.info('FUSION PANEL VERIFIED: %s mm in local X/Y/Z; front stock behind groove=%.2f mm',
+                actual,THICKNESS_MM-TONGUE_DEPTH_MM-JOINT_CLEARANCE_MM)
+
+
+def orient_solid(component, body):
+    import adsk.core
+    import adsk.fusion
+    manager = adsk.fusion.TemporaryBRepManager.get()
+    result = manager.copy(body)
+    rotation = adsk.core.Matrix3D.create()
+    angle = math.radians(LEAN_DEGREES)
+    rotation.setToRotation(-angle,adsk.core.Vector3D.create(1,0,0),point_mm(0,0,0))
+    rotation.translation = adsk.core.Vector3D.create(0,0,THICKNESS_MM*math.sin(angle)/10)
+    if not manager.transform(result,rotation):
+        raise RuntimeError('Could not set the backward lean.')
+    name = body.name
+    body.deleteMe()
+    body = component.bRepBodies.add(result)
+    body.name = name
+    return body
+
+
+def solid_mesh(body):
+    """Tessellate a native Fusion body, convert cm to mm, and weld seam vertices."""
+    calculator = body.meshManager.createMeshCalculator()
+    calculator.surfaceTolerance = 0.002  # 0.02 mm chord tolerance.
+    mesh = calculator.calculate()
+    if not mesh:
+        raise RuntimeError('Fusion could not tessellate '+body.name)
+    points,lookup,remap = [],{},[]
+    for point in mesh.nodeCoordinates:
+        p = (point.x*10,point.y*10,point.z*10)
+        key = tuple(round(v,7) for v in p)
+        if key not in lookup:
+            lookup[key] = len(points)
+            points.append(p)
+        remap.append(lookup[key])
+    indices = mesh.nodeIndices
+    faces = [tuple(remap[j] for j in indices[i:i+3]) for i in range(0,len(indices),3)]
+    result = (points,faces)
+    LOGGER.info('EXPORT MESH %s: %s',body.name,audit(result))
+    return result
+
+
+def export_print_objects(panel,feet,decorations):
+    """Write three 3MF files: one build object per file, explicit millimeter units.
+
+    The plaque is a single multipart object so all three colors stay registered.
+    The feet lie on their broad sides; the plaque lies on its back, face upward.
+    """
+    import zipfile
+    import xml.etree.ElementTree as ET
+    ns = 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'
+    ET.register_namespace('',ns)
+    def element(parent,tag,**attrs):
+        return ET.SubElement(parent,'{'+ns+'}'+tag,{k:str(v) for k,v in attrs.items()})
+    def local(p):
+        x,y,z = p
+        a = math.radians(LEAN_DEGREES)
+        c,t = math.cos(a),math.sin(a)
+        z -= THICKNESS_MM*t
+        return x,y*c-z*t,y*t+z*c
+    objects = [('MyriSaying', [('Black plaque','Black',solid_mesh(panel))]+decorations)]
+    objects += [('MyriSaying_'+side+'Foot',[(side+' foot','Black',solid_mesh(foot))])
+                for side,foot in zip(('Left','Right'),feet)]
+    for object_index,(name,parts) in enumerate(objects):
+        prepared = []
+        for part_name,color,(vertices,faces) in parts:
+            local_points = [local(p) for p in vertices]
+            if object_index == 0:
+                points = [(x+WIDTH_MM/2,z,THICKNESS_MM-y) for x,y,z in local_points]
+            else:
+                center = FOOT_CENTERS_MM[object_index-1]
+                points = [(y,z,x-center+FOOT_WIDTH_MM/2) for x,y,z in local_points]
+            prepared.append((part_name,color,(points,faces)))
+        minima = [min(p[k] for _,_,(vertices,_) in prepared for p in vertices) for k in range(3)]
+        maxima = [max(p[k] for _,_,(vertices,_) in prepared for p in vertices) for k in range(3)]
+        dimensions = [b-a for a,b in zip(minima,maxima)]
+        if object_index == 0 and any(abs(a-b)>1e-5 for a,b in zip(dimensions[:2],(WIDTH_MM,HEIGHT_MM))):
+            raise RuntimeError('Plaque export has incorrect millimeter dimensions.')
+        root = ET.Element('{'+ns+'}model',unit='millimeter')
+        element(root,'metadata',name='Title').text = name
+        resources = element(root,'resources')
+        materials = element(resources,'basematerials',id=1)
+        for color,rgba in COLORS.items():
+            element(materials,'base',name=color,displaycolor=rgba)
+        ids = []
+        for index,(part_name,color,(vertices,faces)) in enumerate(prepared,2):
+            ids.append(index)
+            obj = element(resources,'object',id=index,type='model',name=part_name,
+                          pid=1,pindex=list(COLORS).index(color))
+            mesh = element(obj,'mesh')
+            verts = element(mesh,'vertices')
+            for p in vertices:
+                element(verts,'vertex',**{a:format(p[k]-minima[k],'.9f') for k,a in enumerate(('x','y','z'))})
+            triangles = element(mesh,'triangles')
+            for a,b,c in faces:
+                element(triangles,'triangle',v1=a,v2=b,v3=c)
+        parent_id = len(parts)+2
+        obj = element(resources,'object',id=parent_id,type='model',name=name)
+        components = element(obj,'components')
+        for child_id in ids:
+            element(components,'component',objectid=child_id)
+        element(element(root,'build'),'item',objectid=parent_id)
+        path = HERE/(name+'.3mf')
+        pending = path.with_suffix('.3mf.tmp')
+        with zipfile.ZipFile(pending,'w',zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr('3D/3dmodel.model',ET.tostring(root,encoding='utf-8',xml_declaration=True))
+            archive.writestr('[Content_Types].xml',
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                '<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>')
+            archive.writestr('_rels/.rels',
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel" '
+                'Target="/3D/3dmodel.model"/></Relationships>')
+        with zipfile.ZipFile(pending) as archive:
+            check = ET.fromstring(archive.read('3D/3dmodel.model'))
+            items = check.findall('{'+ns+'}build/{'+ns+'}item')
+            if check.get('unit')!='millimeter' or len(items)!=1:
+                raise RuntimeError('Export must contain one millimeter build object.')
+        pending.replace(path)
+        LOGGER.info('3MF VERIFIED %s: one build object, %s color parts, dimensions=%s mm',
+                    path.name,len(parts),dimensions)
+
+
 def run(context):
-    """Fusion entry point. Creates a new unsaved design and appends the sidecar log."""
+    """Fusion entry point: three printable objects with separately colored plaque bodies."""
     import adsk.core
     import adsk.fusion
     app = adsk.core.Application.get()
+    automated = context == 'automated'
     start_log()
     started = time.monotonic()
     try:
-        LOGGER.info('Fusion version: %s', app.version)
-        parts = generate()
+        LOGGER.info('Fusion version: %s',app.version)
+        decorations = generate()
         doc = app.documents.add(adsk.core.DocumentTypes.FusionDesignDocumentType)
-        doc.name = 'MyriSaying'
+        doc.name = 'MyriSaying - 15 mm - sliding feet'
         design = adsk.fusion.Design.cast(app.activeProduct)
         design.designType = adsk.fusion.DesignTypes.DirectDesignType
         design.unitsManager.distanceDisplayUnits = adsk.fusion.DistanceUnits.MillimeterDistanceUnits
-        component = design.rootComponent.occurrences.addNewComponent(
-            adsk.core.Matrix3D.create()).component
-        component.name = 'MyriSaying'
-        appearances = {}
-        for name, color, mesh in parts:
-            # Fusion's in-memory geometry API uses centimeters, unlike our mm inputs.
-            coordinates = [value / 10.0 for point in mesh[0] for value in point]
+        assembly = design.rootComponent.occurrences.addNewComponent(adsk.core.Matrix3D.create()).component
+        assembly.name = 'MyriSaying - assembled display'
+        def child(name):
+            component = assembly.occurrences.addNewComponent(adsk.core.Matrix3D.create()).component
+            component.name = name
+            return component
+        plaque = child('Plaque - three colors - Save as Mesh')
+        foot_components = [child(side+' foot - Black - Save as Mesh') for side in ('Left','Right')]
+        panel = build_panel(plaque)
+        feet = [build_foot(component,center) for component,center in zip(foot_components,FOOT_CENTERS_MM)]
+        verify_joints(panel,feet)
+        panel = orient_solid(plaque,panel)
+        feet = [orient_solid(component,body) for component,body in zip(foot_components,feet)]
+        finishes = {color:appearance(design,panel.appearance,color,rgba) for color,rgba in COLORS.items()}
+        panel.appearance = finishes['Black']
+        for body in feet:
+            body.appearance = finishes['Black']
+        mesh_reports = []
+        for name,color,mesh in decorations:
+            coordinates = [value/10 for point in mesh[0] for value in point]
             indices = [index for triangle in mesh[1] for index in triangle]
-            body = component.meshBodies.addByTriangleMeshData(coordinates, indices, [], [])
-            if body is None:
-                raise RuntimeError('Could not create mesh body: '+name)
+            body = plaque.meshBodies.addByTriangleMeshData(coordinates,indices,[],[])
+            if not body:
+                raise RuntimeError('Could not create '+name)
             body.name = name
-            if color not in appearances:
-                appearances[color] = appearance(design, body.appearance, color, COLORS[color])
-            body.appearance = appearances[color]
+            body.appearance = finishes[color]
             body.displayOverrides.isSuppressFaceGroupColors = True
             body.displayOverrides.isSuppressTriangleEdges = True
-            LOGGER.info('Created and colored: %s; facets=%s', name, len(mesh[1]))
+            mesh_reports.append(audit(mesh))
+            LOGGER.info('FUSION APPEARANCE %s: %s',name,body.appearance.name)
+        # Native solid mass properties plus decorative mesh volumes, at equal density.
+        volumes,centers = [],[]
+        for body in [panel]+feet:
+            props = body.getPhysicalProperties(adsk.fusion.CalculationAccuracy.HighCalculationAccuracy)
+            volumes.append(props.volume*1000)
+            centers.append([props.centerOfMass.x*10,props.centerOfMass.y*10,props.centerOfMass.z*10])
+            LOGGER.info('FUSION SOLID %s: volume=%.6f mm3; appearance=%s',body.name,volumes[-1],body.appearance.name)
+        for report in mesh_reports:
+            volumes.append(report['volume_mm3']);centers.append(report['center_of_mass_mm'])
+        com = [sum(v*p[i] for v,p in zip(volumes,centers))/sum(volumes) for i in range(3)]
+        rear_bottom = THICKNESS_MM*math.cos(math.radians(LEAN_DEGREES))
+        if not (min(FOOT_CENTERS_MM)<com[0]<max(FOOT_CENTERS_MM)
+                and rear_bottom<com[1]<rear_bottom+FOOT_DEPTH_MM):
+            raise RuntimeError('Center of mass lies outside the tabletop support footprint.')
+        for foot in feet:
+            if abs(foot.preciseBoundingBox.minPoint.z*10)>1e-5:
+                raise RuntimeError('Foot sole is not on the tabletop.')
+        front_normals = [adsk.core.Plane.cast(face.geometry).normal for face in panel.faces
+                         if adsk.core.Plane.cast(face.geometry)
+                         and abs(adsk.core.Plane.cast(face.geometry).normal.x)<1e-8
+                         and abs(adsk.core.Plane.cast(face.geometry).normal.y)>.9]
+        if not front_normals or any(abs(math.degrees(math.atan2(abs(n.z),abs(n.y)))-LEAN_DEGREES)>1e-6
+                                    for n in front_normals):
+            raise RuntimeError('The actual panel face angle differs from the requested lean.')
+        if plaque.bRepBodies.count != 1 or plaque.meshBodies.count != 2:
+            raise RuntimeError('Plaque must contain one black solid and two colored mesh bodies.')
+        if any(c.bRepBodies.count != 1 for c in foot_components):
+            raise RuntimeError('Each printable foot must contain one solid.')
+        LOGGER.info('FUSION STANDING PASS: lean=%s degrees; two flat soles at Z=0; '
+                    'equal-density center of mass=%s mm; three printable parent components.',LEAN_DEGREES,com)
+        export_print_objects(panel,feet,decorations)
         camera = app.activeViewport.camera
-        camera.target = adsk.core.Point3D.create(0, 1, 5)
-        camera.eye = adsk.core.Point3D.create(14, -30, 15)
-        camera.upVector = adsk.core.Vector3D.create(0, 0, 1)
+        camera.target = point_mm(0,20,50)
+        camera.eye = point_mm(180,-330,175)
+        camera.upVector = adsk.core.Vector3D.create(0,0,1)
         camera.isFitView = True
         app.activeViewport.camera = camera
         app.activeViewport.refresh()
-        LOGGER.info('FUSION SUCCESS: five mesh bodies; save the new design manually.')
-        app.userInterface.messageBox(
-            'Created MyriSaying: 200 × 100 × 3 mm panel, 1.2 mm raised cursive, '
-            '10 degree backward lean, and two rear triangular supports.\n\n'
-            'Black plaque/supports, brown twisted-rope frame, white lettering.\n'
-            'Save the new Fusion design. Export a mesh manually when needed.\n\n'
-            'Log: '+str(LOG_PATH), 'MyriSaying')
+        adsk.doEvents()
+        if not app.activeViewport.saveAsImageFile(str(HERE/'mockup.png'),1600,1000):
+            raise RuntimeError('Could not save the current mockup.png.')
+        LOGGER.info('FUSION SUCCESS: 200 x 100 x 15 mm panel; two 15 mm feet; '
+                    '15-degree lean; clearance and retention verified; mockup.png refreshed. '
+                    'Physical print/fit not tested.')
+        if not automated:
+            app.userInterface.messageBox(
+                'Created 200 x 100 x 15 mm plaque and two separate 15 mm black feet.\n'
+                '15-degree backward lean. Open ridged T joints, 0.3 mm clearance per side.\n'
+                'Slide each tongue into the plaque from the bottom until it meets the upper stop.\n\n'
+                'Select Plaque, Left foot, or Right foot for Save as Mesh (millimeters).\n'
+                'Three ready-to-import 3MF files are saved beside this script.\n'
+                'Save the new Fusion design.\n\nLog: '+str(LOG_PATH),'MyriSaying')
+        print('MyriSaying verified: 200 x 100 x 15 mm; feet 15 mm; lean 15 degrees; '
+              'three printable components; mockup saved.')
     except Exception:
         LOGGER.exception('Fusion generation failed')
-        app.userInterface.messageBox('MyriSaying failed. See the full traceback in:\n'+str(LOG_PATH))
+        if not automated:
+            app.userInterface.messageBox('MyriSaying failed. See the traceback in:\n'+str(LOG_PATH))
         raise
     finally:
-        LOGGER.info('RUN END elapsed=%.2fs', time.monotonic()-started)
+        LOGGER.info('RUN END elapsed=%.2fs',time.monotonic()-started)
         close_log()
 
 

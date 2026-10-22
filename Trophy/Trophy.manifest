@@ -3,9 +3,9 @@
   "type": "script",
   "author": "",
   "description": {
-    "": "Volleyball trophy prototype: diamond-textured medium blue tapered base matching the player number, gathered rolled-net stand with a corkscrew swirl, raised white base lettering, medium blue player number. Manual Fusion 3MF export."
+    "": "Volleyball trophy prototype: diamond-textured medium blue tapered base matching the player number, gathered rolled-net stand with a corkscrew swirl, raised white base lettering, medium blue player number. Complete front/back volleyball panel seams. Manual Fusion 3MF export."
   },
-  "version": "4.4.2",
+  "version": "4.4.3",
   "runOnStartup": false,
   "supportedOS": "windows|mac"
 }

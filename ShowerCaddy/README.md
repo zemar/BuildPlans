@@ -1,8 +1,10 @@
+> Fusion script update: the basket now has a centered circular crest recess, **70.4 mm diameter × 1 mm deep**, at X=129.5 and Z=50.8 mm on the front face. It leaves 2 mm of wall and accepts the separate 70 × 2 mm crest with 0.2 mm radial clearance. The crest projects 1 mm plus glue thickness. The OpenSCAD version still has the plain front; `mockup.png` shows the updated Fusion model.
+
 # Shower caddy with sliding hook arms
 
 Run `ShowerCaddy.py` in Fusion through **Utilities → Scripts and Add-Ins → Scripts**. It is self-contained and creates a new, unsaved design. Each run appends diagnostics to `ShowerCaddy.log`. Save and export manually from Fusion; the script generates no STL or 3MF files.
 
-The assembly contains three components, each with one solid: **01 Basket**, **02 Left arm**, and **03 Right arm**. The front is plain, with its full 3 mm wall thickness. Artwork, colored bodies, and the artwork recess have been removed. The existing artwork preview and previously exported files are not regenerated or deleted.
+The assembly contains three components, each with one solid: **01 Basket**, **02 Left arm**, and **03 Right arm**. The front has the circular crest seat described above; the wall is 3 mm thick outside that seat. The crest is printed separately, so no artwork or colored bodies are generated. The existing artwork preview and previously exported files are not regenerated or deleted.
 
 ## Preserved dimensions
 
@@ -44,3 +46,11 @@ No bolts, nuts, crossbar, or adhesive are required for these arm joints. Separat
 Local checks passed for Python syntax, the preserved dimensions, drainage count, closed rounded joint profiles, nominal male/female clearance, and shoulder bearing area. The script checks feature health and verifies that each finished component is one connected solid. Failures and tracebacks go to the sidecar log under revision `sliding-tongue-groove-v3`.
 
 Fusion kernel execution, printed fit, and physical load capacity remain unverified for this revision. The prior exported `ShowerCaddy.3mf` is an older model; rerun this script and export the new design. See [PRINTING.md](PRINTING.md) for part orientation and fit checks.
+
+## OpenSCAD version
+
+[ShowerCaddy.scad](ShowerCaddy.scad) is a self-contained translation of the current plain-front basket and sliding hook arms. Open it in OpenSCAD and use the `part` selector for `assembly`, `basket`, `left_arm`, `right_arm`, `print_layout`, or `exploded`. Render with F6 before exporting. Export each printable object separately; named SCAD modules and the selector replace Fusion component selection. The layout is an orientation reference and may require multiple build plates.
+
+The dimensions, smooth root taper, R4 hook bends, drainage grid, sliding sections, seating shoulders, and clearances are retained. OpenSCAD uses CSG sweeps for edge rounding, so small junction blends are approximations of the Fusion fillets. There is no artwork or front recess.
+
+OpenSCAD renders verified the basket at 259 × 88.9 × 101.6 mm and each arm at 45 × 55.5 × 300 mm including its widened root and hook. Each printable part is one closed connected mesh with no nonmanifold edges; the print layout has three separate shells. The seated joint has no measurable overlapping volume. Verification output is in `ShowerCaddy.scad.log`; a rendered assembly is in [mockup.png](mockup.png). OpenSCAD cannot write files from SCAD code, so future sidecar logs require redirecting its console output as described in the file header. This translation was verified in OpenSCAD, not by a new Fusion run.

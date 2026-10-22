@@ -53,6 +53,9 @@ JOINT_CLEARANCE = 0.30             # Per side, not total clearance
 JOINT_RADIUS = 0.40
 SHOULDER_WIDTH = 39.0
 SHOULDER_DEPTH = 10.0
+# Glue-in seat for the separately printed 70 x 2 mm crest.
+CREST_RECESS_DIAMETER = 70.4
+CREST_RECESS_DEPTH = 1.0
 LOG_PATH = Path(__file__).resolve().with_suffix('.log')
 LOGGER = logging.getLogger('ShowerCaddy')
 
@@ -69,7 +72,7 @@ def start_log():
     formatter.converter = time.gmtime
     handler.setFormatter(formatter)
     LOGGER.addHandler(handler)
-    LOGGER.info('=== RUN START sliding-tongue-groove-v3 (timestamps UTC) ===')
+    LOGGER.info('=== RUN START sliding-tongue-groove-v4-crest-recess (timestamps UTC) ===')
     LOGGER.info('Script: %s', Path(__file__).resolve())
     LOGGER.info('Inputs (dimensions mm): %s', {
         name: value for name, value in globals().items()
@@ -177,6 +180,11 @@ def validate():
             and TONGUE_HEAD+2*JOINT_CLEARANCE+2*JOINT_RADIUS < SHOULDER_WIDTH < HOOK_WIDTH+ROOT_WEB_WIDTH
             and TONGUE_DEPTH+JOINT_CLEARANCE+2*JOINT_RADIUS < SHOULDER_DEPTH < SOCKET_DEPTH):
         raise ValueError('Invalid reinforcement, sliding joint, or hook-bend dimensions.')
+    if not (math.isfinite(CREST_RECESS_DIAMETER)
+            and math.isfinite(CREST_RECESS_DEPTH)
+            and 0 < CREST_RECESS_DIAMETER < min(BASKET_WIDTH, SIDE_HEIGHT)-2*WALL_THICKNESS
+            and 0 < CREST_RECESS_DEPTH <= WALL_THICKNESS-2.0):
+        raise ValueError('Crest recess must fit the front and leave at least 2 mm of wall.')
     mesh_layout()
     return bridge_z
 
@@ -349,6 +357,20 @@ def extrude_y(component, sketch, delta_y, operation, name):
         raise RuntimeError(name + ': ' + feature.errorOrWarningMessage)
     LOGGER.info('DONE Y extrusion: %s; component bodies=%s', name, component.bRepBodies.count)
     return feature
+
+
+def cut_crest_recess(component):
+    """Centered circular glue seat; preserve the specified full-depth diameter."""
+    x, y, z = BASKET_WIDTH/2, BASKET_DEPTH, SIDE_HEIGHT/2
+    sketch = xz_sketch(component, y, 'Centered crest recess')
+    sketch.sketchCurves.sketchCircles.addByCenterRadius(
+        xz_point(sketch, x, y, z), CREST_RECESS_DIAMETER/20.0)
+    extrude_y(component, sketch, -CREST_RECESS_DEPTH,
+              adsk.fusion.FeatureOperations.CutFeatureOperation,
+              'Crest recess - 70.4 mm diameter x 1 mm deep')
+    LOGGER.info('Crest recess: diameter=%s mm; depth=%s mm; center=(%s,%s,%s) mm; remaining wall=%s mm',
+                CREST_RECESS_DIAMETER, CREST_RECESS_DEPTH, x, y, z,
+                WALL_THICKNESS-CREST_RECESS_DEPTH)
 
 
 def joint_outline(center, clearance=0.0):
@@ -575,10 +597,11 @@ def run(context):
             occurrences.append(occurrence)
             components.append(occurrence.component)
         basket, left, right = components
-        LOGGER.info('Building basket with open sliding sockets; plain front')
+        LOGGER.info('Building basket with open sliding sockets and centered crest recess')
         build_basket(basket, bridge_z)
         round_all_edges(basket)
         cut_sliding_channels(basket)
+        cut_crest_recess(basket)
         apply_black_pla(design, basket)
         for component, is_right in ((left,False),(right,True)):
             build_arm(component,bridge_z,is_right)
@@ -599,7 +622,7 @@ def run(context):
                     time.perf_counter() - started)
         ui.messageBox(
             'Created basket and two separate sliding hook arms. Dimensions are mm.\n'
-            'Basket: 259 x 88.9 x 101.6; plain front, no artwork.\n'
+            'Basket: 259 x 88.9 x 101.6; centered crest recess 70.4 diameter x 1 deep.\n'
             'Arms: 25 wide x 10 thick; reinforced 45 mm roots.\n'
             'Hook rise: 305; clear throat: 25.5.\n\n'
             'Slide basket grooves down over the arm tongues until seated on shoulders.\n'

@@ -2,8 +2,10 @@
   "autodeskProduct": "Fusion360",
   "type": "script",
   "author": "",
-  "description": {"": "Self-contained Fusion script: black 200 x 100 x 3 mm plaque, brown twisted-rope frame, raised white cursive and two rear supports. Creates mesh bodies directly in memory and writes a log sidecar."},
-  "version": "1.1.0",
+  "description": {
+    "": "Self-contained Fusion script: 200 x 100 x 15 mm black plaque, brown rope frame, white cursive and two 15 mm black feet using the exact CamelandPanda open T joint profile and rail length, seated at 15 degrees. Three printable components, log sidecar and current mockup. R7 outer corners and three millimeter 3MF files; plaque exported as one multipart object."
+  },
+  "version": "2.2.0",
   "runOnStartup": false,
   "supportedOS": "windows|mac"
 }

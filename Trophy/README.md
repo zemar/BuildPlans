@@ -25,16 +25,23 @@ tests folders are created; export 3MF manually from Fusion.
 
 ## OpenSCAD version
 
-`Trophy.scad` is a self-contained editable conversion of prototype 4.4.2.
-Open it in OpenSCAD, edit `PLAYER_NAME` and `PLAYER_NUMBER`, preview with F5
-and render with F6. It preserves the millimeter dimensions, Z-up orientation,
-three colors, recessed texture, grooved ball and swirling mesh geometry.
-Text metrics and tessellation differ slightly from Fusion.
+`Trophy.scad` contains the complete prototype 4.4.3 exported from the latest
+Fusion mesh, including exact lettering, hidden connections, texture, seams,
+colors and the swirled rolled-net stand. All geometry is embedded; no imports,
+fonts, libraries, or helper files are required. It is a fixed mesh snapshot,
+not a parametric rewrite. Use `Trophy.py` to change the player or geometry.
 
-Use `PART` to select `base`, `stand`, `ball`, `writing`, or `number` for separate
-exports. Import the exported parts together into Bambu Studio as one multipart
-object and preserve their assembled positions. Assign the filaments manually;
-preview colors alone do not guarantee multicolor 3MF export in every OpenSCAD
-version. `Trophy.py` remains the Fusion source, and `Trophy.manifest` tracks the
-prototype version. The OpenSCAD file has not been rendered locally because
-OpenSCAD is not installed.
+Open in OpenSCAD, use F5 to preview and F6 to render. `PART` selects `all`,
+`base`, `stand`, `ball`, `writing`, or `number`. Individual parts retain their
+assembled coordinates. For separate material exports, import the parts together
+in Bambu Studio as one multipart object and assign the reels manually.
+
+Validated with OpenSCAD 2026.10.11 using its Manifold renderer: no geometry
+errors; overall bounds 88 × 64.112 × 126.997 mm (nominal 127 mm tall). The
+slightly extended depth includes raised lettering. `mockup.png` is the current
+OpenSCAD preview. The Fusion source and manifest are unchanged.
+
+Volleyball panel fix (4.4.3): explicit curved stripe grooves are verified on all
+six spherical panel groups, including the back. Fusion solid checks and rear
+visual inspection passed. Trophy.scad is refreshed from the corrected Fusion
+geometry; older manually exported 3MF files must be exported again.
