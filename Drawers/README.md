@@ -1,6 +1,6 @@
 # Drawer1 — removable brown bins
 
-Run `Drawer1.py` in Fusion using `Drawer1.manifest`. The script creates four
+Run `Drawer1.py` in Fusion using `Drawer1.manifest`. The script creates five
 independent, complete bins with continuous floors and walls in a new Fusion
 document. Save and export them manually in Fusion. Cut the long bins in Bambu
 Studio before printing.
@@ -9,17 +9,28 @@ Dimensions are mm and assume the drawer measurements are clear internal sizes.
 
 | Bin | Clear width × length | Exterior width × length × height |
 | --- | --- | --- |
-| Long left | 116.2375 × 355.6 | 121.0375 × 360.4 × 65 |
-| Short left | 116.2375 × 159.45 | 121.0375 × 164.25 × 65 |
-| Long right | 116.2375 × 304.8 | 121.0375 × 309.6 × 65 |
-| Short right | 116.2375 × 210.25 | 121.0375 × 215.05 × 65 |
+| Front | 315.2 × 95.2 | 320 × 100 × 80 |
+| Long left | 194.8 × 250.00 | 199.6 × 254.80 × 80 |
+| Short left | 194.8 × 163.60 | 199.6 × 168.40 × 80 |
+| Middle right (`Drawer1_Long_Right`) | 115.2 × 158.2 | 120 × 163 × 80 |
+| Short right | 115.2 × 255.4 | 120 × 260.2 × 80 |
 
-The requested right-bin clear lengths total the drawer's full 527.05 mm length.
-Keeping 304.8 mm clear in the long-right bin leaves 210.25 mm clear in the
-short-right after subtracting four end walls, the gap, and outside clearance.
-The arrangement is 242.475 × 525.05 mm inside the 244.475 × 527.05 × 76.2 mm
-drawer. There is 1 mm clearance at each outside edge and 0.4 mm between bins.
-Walls are 2.4 mm; floors are 2 mm. Clear height is 63 mm above the floor.
+The drawer is 322 × 526 × 80 mm. The arrangement occupies 320 × 524 × 80 mm.
+The specified 2 mm horizontal clearance is total (1 mm per side), which preserves
+the requested 320 mm front-bin outside width. All bins use the full 80 mm height
+with no extra height clearance, as requested. The Fusion placements include the
+1 mm inset from the drawer origin in both horizontal axes.
+
+The 100 mm-deep front bin spans the full available width. A 0.4 mm gap separates
+it from the bins behind it. The left middle bin has a 250 mm clear length; the
+left back bin uses the remaining space.
+The middle-right bin is 120 mm wide × 163 mm deep outside and sits against the
+right edge. Both left bins widen to fill the adjacent space, and the back-right
+bin extends behind the middle-right bin to the back of the drawer. Only 0.4 mm
+assembly gaps remain between bins. The rear-right bin keeps its component name
+`Drawer1_Short_Right`. Walls are 2.4 mm; floors are 2 mm. Outside plan-view corners are rounded to a
+5 mm radius and inside corners to a 2.6 mm radius to preserve wall thickness.
+Clear height is 78 mm.
 
 ## Run and export
 
@@ -27,12 +38,12 @@ Walls are 2.4 mm; floors are 2 mm. Clear height is 63 mm above the floor.
 2. Add this existing `Drawers` folder and run **Drawer1**.
 3. Save the new design in Fusion. Right-click an individual bin component in
    the Browser and choose **Save As Mesh** to export it as 3MF or STL in mm.
-4. Each run appends inputs, construction details, dimensions, export paths, and
+4. Each run appends inputs, construction details, dimension checks, appearance, and
    error tracebacks to `Drawer1.log`.
 
 ## Printing
 
-Import each long bin into Bambu Studio and use **Cut** to create printable
+Import a bin into Bambu Studio and use **Cut** as needed to create printable
 sections before arranging the plate. The Fusion models contain no joints or
 predefined seams. Choose the cut positions and any connectors in Bambu Studio.
 The left long bin is larger than the flat print area so

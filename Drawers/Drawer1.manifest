@@ -3,9 +3,9 @@
   "type": "script",
   "author": "",
   "description": {
-    "": "Create four independent brown drawer bins in Fusion, ready for manual mesh export and cutting in Bambu Studio."
+    "": "Create five brown bins for a 322 x 526 x 80 mm drawer, including a 320 x 100 mm front bin and a 120 x 163 mm middle-right bin."
   },
-  "version": "4.1.0",
+  "version": "5.2.0",
   "runOnStartup": false,
   "supportedOS": "windows|mac"
 }

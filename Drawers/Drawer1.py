@@ -1,6 +1,6 @@
 """Run in Autodesk Fusion, Utilities > Scripts and Add-Ins > Scripts.
 
-Creates four complete drawer bins in a NEW Fusion document.
+Creates five complete drawer bins in a NEW Fusion document.
 Save and export the model manually in Fusion; cut the long bins in Bambu Studio.
 All design inputs are mm; Fusion's internal geometry units are cm.
 Brown appearance is cosmetic: select your filament in Bambu Studio.
@@ -15,50 +15,71 @@ import adsk.core
 import adsk.fusion
 
 
-# Converted from H 3 in, W 9 5/8 in, D 20 3/4 in.
-DRAWER_HEIGHT = 76.2
-DRAWER_WIDTH = 244.475
-DRAWER_DEPTH = 527.05
-TOOL_LENGTH = 355.6                 # 14 in
+# Clear internal drawer dimensions, in millimeters.
+DRAWER_HEIGHT = 80.0
+DRAWER_WIDTH = 322.0
+DRAWER_DEPTH = 526.0
 TOOL_WIDTH = 114.3                  # 4.5 in
 
 # Edit these values and rerun to generate a new revision.
-EDGE_CLEARANCE = 1.0                # On EACH of the four sides
-HEIGHT = 65.0                      # Overall, including floor
+TOTAL_CLEARANCE = 2.0               # Total reduction in width and depth
+EDGE_CLEARANCE = TOTAL_CLEARANCE / 2 # 1 mm on each horizontal side
+HEIGHT = DRAWER_HEIGHT             # Full 80 mm; no extra height clearance
 FLOOR = 2.0
 WALL = 2.4
 BIN_GAP = 0.4                     # Between independently removable bins
-BIN_WIDTH = (DRAWER_WIDTH - 2 * EDGE_CLEARANCE - BIN_GAP) / 2
+CORNER_RADIUS = 5.0               # Outside plan-view corner radius
+INSIDE_CORNER_RADIUS = CORNER_RADIUS - WALL
+FRONT_WIDTH = 320.0                # Outside width
+FRONT_DEPTH = 100.0                # Outside front-to-back depth
+REAR_START = FRONT_DEPTH + BIN_GAP
+REAR_DEPTH = DRAWER_DEPTH - TOTAL_CLEARANCE - REAR_START
+RIGHT_LONG_WIDTH = 120.0           # Middle-right outside width
+BIN_WIDTH = DRAWER_WIDTH - TOTAL_CLEARANCE - BIN_GAP - RIGHT_LONG_WIDTH
 LONG_BAY_WIDTH = BIN_WIDTH - 2 * WALL
-LONG_BAY_LENGTH = 355.6             # Left: 14 inches clear
-RIGHT_LONG_BAY_LENGTH = 304.8       # Right: 12 inches clear
+LONG_BAY_LENGTH = 250.0              # Left middle clear length
+RIGHT_LONG_OUTER_LENGTH = 163.0    # Middle-right outside depth
+RIGHT_LONG_BAY_WIDTH = RIGHT_LONG_WIDTH - 2 * WALL
+RIGHT_LONG_BAY_LENGTH = RIGHT_LONG_OUTER_LENGTH - 2 * WALL
 # Rear clear lengths are reduced to leave space for walls and bin clearance.
 LONG_OUTER_LENGTH = LONG_BAY_LENGTH + 2 * WALL
-RIGHT_LONG_OUTER_LENGTH = RIGHT_LONG_BAY_LENGTH + 2 * WALL
-SHORT_OUTER_LENGTH = DRAWER_DEPTH - 2 * EDGE_CLEARANCE - BIN_GAP - LONG_OUTER_LENGTH
-RIGHT_SHORT_OUTER_LENGTH = DRAWER_DEPTH - 2 * EDGE_CLEARANCE - BIN_GAP - RIGHT_LONG_OUTER_LENGTH
+SHORT_OUTER_LENGTH = REAR_DEPTH - BIN_GAP - LONG_OUTER_LENGTH
+RIGHT_SHORT_OUTER_LENGTH = REAR_DEPTH - BIN_GAP - RIGHT_LONG_OUTER_LENGTH
+RIGHT_SHORT_START = REAR_START + RIGHT_LONG_OUTER_LENGTH + BIN_GAP
 SHORT_BAY_LENGTH = SHORT_OUTER_LENGTH - 2 * WALL
 RIGHT_SHORT_BAY_LENGTH = RIGHT_SHORT_OUTER_LENGTH - 2 * WALL
 
 
 def layout():
-    """Four complete bins: name, drawer X/Y, outer length."""
+    """Five complete bins: name, inset-area X/Y, outside width and depth."""
     width = DRAWER_WIDTH - 2 * EDGE_CLEARANCE
     depth = DRAWER_DEPTH - 2 * EDGE_CLEARANCE
-    assert 0 < FLOOR < HEIGHT < DRAWER_HEIGHT
+    assert 0 < FLOOR < HEIGHT <= DRAWER_HEIGHT
     assert WALL > 0 and EDGE_CLEARANCE >= 0 and BIN_GAP > 0
-    assert LONG_BAY_WIDTH > TOOL_WIDTH and LONG_BAY_LENGTH >= TOOL_LENGTH
+    assert LONG_BAY_WIDTH > TOOL_WIDTH and LONG_BAY_LENGTH > 0
     assert SHORT_BAY_LENGTH > 0 and RIGHT_SHORT_BAY_LENGTH > 0
-    bins = []
-    for side, x, total, short in (
-            ('Left', 0, LONG_OUTER_LENGTH, SHORT_OUTER_LENGTH),
-            ('Right', BIN_WIDTH + BIN_GAP, RIGHT_LONG_OUTER_LENGTH, RIGHT_SHORT_OUTER_LENGTH)):
-        bins.extend([
-            ('Long_' + side, x, 0, total),
-            ('Short_' + side, x, total + BIN_GAP, short),
-        ])
-    for name, x, y, length in bins:
-        assert x + BIN_WIDTH <= width + 1e-8 and y + length <= depth + 1e-8
+    assert abs(FRONT_WIDTH - width) < 1e-8
+    assert FRONT_DEPTH > 2 * WALL
+    bins = [
+        ('Front', 0, 0, FRONT_WIDTH, FRONT_DEPTH),
+        ('Long_Left', 0, REAR_START, BIN_WIDTH, LONG_OUTER_LENGTH),
+        ('Short_Left', 0, REAR_START + LONG_OUTER_LENGTH + BIN_GAP,
+         BIN_WIDTH, SHORT_OUTER_LENGTH),
+        # Fill the rear area with a wider left column and a 120 mm right column.
+        ('Long_Right', width - RIGHT_LONG_WIDTH, REAR_START,
+         RIGHT_LONG_WIDTH, RIGHT_LONG_OUTER_LENGTH),
+        ('Short_Right', BIN_WIDTH + BIN_GAP, RIGHT_SHORT_START,
+         RIGHT_LONG_WIDTH, RIGHT_SHORT_OUTER_LENGTH),
+    ]
+    for name, x, y, bin_width, length in bins:
+        assert x >= 0 and y >= 0 and bin_width > 2 * WALL and length > 2 * WALL, name
+        assert x + bin_width <= width + 1e-8 and y + length <= depth + 1e-8, name
+    for i, first in enumerate(bins):
+        _, ax, ay, aw, ad = first
+        for second in bins[i + 1:]:
+            _, bx, by, bw, bd = second
+            assert (ax + aw <= bx or bx + bw <= ax or
+                    ay + ad <= by or by + bd <= ay), (first[0], second[0])
     return width, depth, bins
 
 
@@ -80,6 +101,62 @@ def extrude_rectangle(component, plane, rectangle, height, name, join=False):
     feature.name = name
     sketch.isVisible = False
     return feature
+
+
+def round_outer_corners(component, body, bin_width, length):
+    """Fillet the four outside vertical edges."""
+    corners = ((0.0, 0.0), (bin_width, 0.0),
+               (0.0, length), (bin_width, length))
+    edges = adsk.core.ObjectCollection.create()
+    for edge in body.edges:
+        bounds = edge.boundingBox
+        x_span = (bounds.maxPoint.x - bounds.minPoint.x) * 10.0
+        y_span = (bounds.maxPoint.y - bounds.minPoint.y) * 10.0
+        z_span = (bounds.maxPoint.z - bounds.minPoint.z) * 10.0
+        if x_span > 0.001 or y_span > 0.001 or z_span < HEIGHT - 0.001:
+            continue
+        position = (bounds.minPoint.x * 10.0, bounds.minPoint.y * 10.0)
+        if any(abs(position[0] - x) < 0.001 and abs(position[1] - y) < 0.001
+               for x, y in corners):
+            edges.add(edge)
+    if edges.count != len(corners):
+        raise RuntimeError('Expected four outside corner edges; found %d' % edges.count)
+    fillet_input = component.features.filletFeatures.createInput()
+    fillet_input.edgeSetInputs.addConstantRadiusEdgeSet(
+        edges, adsk.core.ValueInput.createByReal(CORNER_RADIUS / 10.0), False)
+    fillet = component.features.filletFeatures.add(fillet_input)
+    if not fillet or fillet.healthState != adsk.fusion.FeatureHealthStates.HealthyFeatureHealthState:
+        message = fillet.errorOrWarningMessage if fillet else 'no feature returned'
+        raise RuntimeError('Outside corner fillet failed: ' + message)
+    fillet.name = 'Outside corners - R%.1f mm' % CORNER_RADIUS
+
+
+def round_inner_corners(component, body, bin_width, length):
+    """Fillet inside vertical edges to preserve the wall thickness at corners."""
+    corners = ((WALL, WALL), (bin_width - WALL, WALL),
+               (WALL, length - WALL), (bin_width - WALL, length - WALL))
+    edges = adsk.core.ObjectCollection.create()
+    for edge in body.edges:
+        bounds = edge.boundingBox
+        x_span = (bounds.maxPoint.x - bounds.minPoint.x) * 10.0
+        y_span = (bounds.maxPoint.y - bounds.minPoint.y) * 10.0
+        z_span = (bounds.maxPoint.z - bounds.minPoint.z) * 10.0
+        if x_span > 0.001 or y_span > 0.001 or z_span < HEIGHT - FLOOR - 0.001:
+            continue
+        position = (bounds.minPoint.x * 10.0, bounds.minPoint.y * 10.0)
+        if any(abs(position[0] - x) < 0.001 and abs(position[1] - y) < 0.001
+               for x, y in corners):
+            edges.add(edge)
+    if edges.count != len(corners):
+        raise RuntimeError('Expected four inside corner edges; found %d' % edges.count)
+    fillet_input = component.features.filletFeatures.createInput()
+    fillet_input.edgeSetInputs.addConstantRadiusEdgeSet(
+        edges, adsk.core.ValueInput.createByReal(INSIDE_CORNER_RADIUS / 10.0), False)
+    fillet = component.features.filletFeatures.add(fillet_input)
+    if not fillet or fillet.healthState != adsk.fusion.FeatureHealthStates.HealthyFeatureHealthState:
+        message = fillet.errorOrWarningMessage if fillet else 'no feature returned'
+        raise RuntimeError('Inside corner fillet failed: ' + message)
+    fillet.name = 'Inside corners - R%.1f mm' % INSIDE_CORNER_RADIUS
 
 
 def brown_appearance(app, design):
@@ -138,19 +215,20 @@ def run(context):
             warnings.append('Brown appearance not applied: ' + str(exc))
             logger.warning('Brown appearance unavailable', exc_info=True)
 
-        for name, x, y, length in bins:
+        for name, x, y, bin_width, length in bins:
             logger.info('Building %s: width=%s depth=%s height=%s',
-                        name, BIN_WIDTH, length, HEIGHT)
+                        name, bin_width, length, HEIGHT)
             # Local component geometry begins at (0,0,0) for individual exports.
-            # Occurrence translation presents the four bins in their drawer positions.
+            # Include the peripheral clearance in actual drawer coordinates.
             transform = adsk.core.Matrix3D.create()
-            transform.translation = adsk.core.Vector3D.create(x / 10.0, y / 10.0, 0)
+            transform.translation = adsk.core.Vector3D.create(
+                (x + EDGE_CLEARANCE) / 10.0, (y + EDGE_CLEARANCE) / 10.0, 0)
             occurrence = root.occurrences.addNewComponent(transform)
             component = occurrence.component
             component.name = 'Drawer1_' + name
             component.attributes.add('Drawer1', 'Color', 'Brown')
             extrude_rectangle(component, component.xYConstructionPlane,
-                              (0, 0, BIN_WIDTH, length), FLOOR, 'Floor')
+                              (0, 0, bin_width, length), FLOOR, 'Floor')
             plane_input = component.constructionPlanes.createInput()
             plane_input.setByOffset(component.xYConstructionPlane,
                                     adsk.core.ValueInput.createByReal(FLOOR / 10.0))
@@ -159,9 +237,9 @@ def run(context):
             # isVisible reports effective visibility and has no setter for planes.
             wall_plane.isLightBulbOn = False
             walls = [(0, 0, WALL, length),
-                     (BIN_WIDTH - WALL, 0, BIN_WIDTH, length),
-                     (0, 0, BIN_WIDTH, WALL),
-                     (0, length - WALL, BIN_WIDTH, length)]
+                     (bin_width - WALL, 0, bin_width, length),
+                     (0, 0, bin_width, WALL),
+                     (0, length - WALL, bin_width, length)]
             for i, rectangle in enumerate(walls):
                 logger.info('%s wall %s: rectangle=%s', name, i + 1, rectangle)
                 extrude_rectangle(component, wall_plane, rectangle,
@@ -169,25 +247,42 @@ def run(context):
             if component.bRepBodies.count != 1 or not component.bRepBodies.item(0).isSolid:
                 raise RuntimeError(name + ' must be one joined solid.')
             body = component.bRepBodies.item(0)
+            round_outer_corners(component, body, bin_width, length)
+            body = component.bRepBodies.item(0)
+            round_inner_corners(component, body, bin_width, length)
+            body = component.bRepBodies.item(0)
             bounds = body.boundingBox
+            actual_dimensions = ((bounds.maxPoint.x - bounds.minPoint.x) * 10,
+                                 (bounds.maxPoint.y - bounds.minPoint.y) * 10,
+                                 (bounds.maxPoint.z - bounds.minPoint.z) * 10)
+            if any(abs(actual - expected) > 0.001 for actual, expected in
+                   zip(actual_dimensions, (bin_width, length, HEIGHT))):
+                raise RuntimeError('%s dimensions differ: expected %s, got %s' %
+                                   (name, (bin_width, length, HEIGHT), actual_dimensions))
             logger.info('%s solid validated: volume_cm3=%s bounds_mm=%s', name,
-                        body.volume, ((bounds.maxPoint.x - bounds.minPoint.x) * 10,
-                                      (bounds.maxPoint.y - bounds.minPoint.y) * 10,
-                                      (bounds.maxPoint.z - bounds.minPoint.z) * 10))
+                        body.volume, actual_dimensions)
             body.name = component.name + '_Brown'
             if appearance:
                 body.appearance = appearance
+                logger.info('%s appearance applied: %s', name, body.appearance.name)
         app.activeViewport.fit()
         message = (
-            'Four complete brown bins created.\n\n'
+            'Five complete brown bins created.\n\n'
+            'Drawer W x D x H: 322 x 526 x 80 mm.\n'
+            'Front bin outside W x D x H: %.1f x %.1f x %.1f mm.\n'
+            'Horizontal clearance: %.1f mm per side; no extra height clearance.\n'
+            'Middle-right outside W x D: %.1f x %.1f mm.\n'
             'Clear lengths (mm): left long %.2f, left short %.2f;\n'
-            'right long %.2f, right short %.2f. Clear width %.3f.\n\n'
+            'right middle %.2f, right rear %.2f.\n'
+            'Clear widths: right bins %.1f; left bins %.1f mm.\n\n'
             'Save the design in Fusion. Export the desired bins using Save As Mesh.\n'
             'Import at 100%% scale in Bambu Studio.\n'
-            'Cut the long bins in Bambu Studio before printing.\n'
-            'Short bins print flat; choose print settings after cutting the long bins.'
-        ) % (LONG_BAY_LENGTH, SHORT_BAY_LENGTH, RIGHT_LONG_BAY_LENGTH,
-             RIGHT_SHORT_BAY_LENGTH, LONG_BAY_WIDTH)
+            'Make any needed cuts in Bambu Studio before printing.\n'
+            'Choose the needed cuts and print settings in Bambu Studio.'
+        ) % (FRONT_WIDTH, FRONT_DEPTH, HEIGHT, EDGE_CLEARANCE,
+             RIGHT_LONG_WIDTH, RIGHT_LONG_OUTER_LENGTH,
+             LONG_BAY_LENGTH, SHORT_BAY_LENGTH, RIGHT_LONG_BAY_LENGTH,
+             RIGHT_SHORT_BAY_LENGTH, RIGHT_LONG_BAY_WIDTH, LONG_BAY_WIDTH)
         if warnings:
             message += '\n\n' + '\n'.join(warnings)
         message += '\n\nRun log: ' + str(log_path)

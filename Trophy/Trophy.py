@@ -14,8 +14,8 @@ import adsk.core
 import adsk.fusion
 
 
-PLAYER_NAME = "Myriam Howard"  # Change this and rerun for each player.
-PLAYER_NUMBER = "#6"  # Raised medium blue lettering on the volleyball.
+PLAYER_NAME = "Willow Ketterman"  # Change this and rerun for each player.
+PLAYER_NUMBER = "#11"  # Raised medium blue lettering on the volleyball.
 FONT_NAME = "Arial"
 TOTAL_HEIGHT_MM = 127.0
 BALL_RADIUS_MM = 25.0
@@ -543,7 +543,7 @@ def run(context):
 
         stage = "raised white lettering on tapered base"
         write_run_log("STAGE: " + stage)
-        name_height = min(7.0, 74.0 / (max(len(name), 1) * 0.62))
+        name_height = min(7.0, 74.0 / (max(len(name), 1) * 0.80))
         lettering = []
         lettering.extend(inlay_line(root, base, "Player name", name, 15, 28, name_height))
         lettering.extend(inlay_line(root, base, "Organization line 1",
