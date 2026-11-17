@@ -1,0 +1,11 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "script",
+  "author": "",
+  "description": {
+    "": "One-piece pink staircase rack for 56 nail polish bottles (7 rows of 8), 34 mm holes, black "Naked Nails" front inlay, a through compartment with two print-in-place doors, sized for the Bambu Lab H2D build plate. All dimensions in mm."
+  },
+  "version": "2.0.0",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac"
+}

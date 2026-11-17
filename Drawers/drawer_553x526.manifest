@@ -1,0 +1,11 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "script",
+  "author": "",
+  "description": {
+    "": "Preview 14 brown bins filling the drawer with touching walls: ten dining-utensil bins in a front row and four rear storage bins."
+  },
+  "version": "7.0.0",
+  "runOnStartup": false,
+  "supportedOS": "windows|mac"
+}

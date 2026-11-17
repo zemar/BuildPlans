@@ -1,7 +1,9 @@
 """Run in Autodesk Fusion, Utilities > Scripts and Add-Ins > Scripts.
 
-Creates five complete drawer bins in a NEW Fusion document.
-Save and export the model manually in Fusion; cut the long bins in Bambu Studio.
+Creates fourteen separate drawer bins in a NEW Fusion document.
+Requested internal sizes are minimums, enlarged for a flush, full-drawer layout.
+Ten dining-utensil bins span the front; four storage bins fill the rear.
+Save and export the model manually in Fusion; check plate fit in Bambu Studio.
 All design inputs are mm; Fusion's internal geometry units are cm.
 Brown appearance is cosmetic: select your filament in Bambu Studio.
 The drawer dimensions are assumed to be clear INTERNAL dimensions.
@@ -9,77 +11,124 @@ The drawer dimensions are assumed to be clear INTERNAL dimensions.
 
 from pathlib import Path
 import logging
+import math
 import traceback
 
 import adsk.core
 import adsk.fusion
 
 
-# Clear internal drawer dimensions, in millimeters.
+# Drawer and bin dimensions are millimeters; all requested sizes are INTERNAL.
 DRAWER_HEIGHT = 80.0
-DRAWER_WIDTH = 322.0
+DRAWER_WIDTH = 553.0
 DRAWER_DEPTH = 526.0
-TOOL_WIDTH = 114.3                  # 4.5 in
-
-# Edit these values and rerun to generate a new revision.
-TOTAL_CLEARANCE = 2.0               # Total reduction in width and depth
-EDGE_CLEARANCE = TOTAL_CLEARANCE / 2 # 1 mm on each horizontal side
-HEIGHT = DRAWER_HEIGHT             # Full 80 mm; no extra height clearance
+TOTAL_CLEARANCE = 2.0               # Total reduction in drawer width and depth
+EDGE_CLEARANCE = TOTAL_CLEARANCE / 2
+HEIGHT = DRAWER_HEIGHT
 FLOOR = 2.0
 WALL = 2.4
-BIN_GAP = 0.4                     # Between independently removable bins
-CORNER_RADIUS = 5.0               # Outside plan-view corner radius
-INSIDE_CORNER_RADIUS = CORNER_RADIUS - WALL
-FRONT_WIDTH = 320.0                # Outside width
-FRONT_DEPTH = 100.0                # Outside front-to-back depth
-REAR_START = FRONT_DEPTH + BIN_GAP
-REAR_DEPTH = DRAWER_DEPTH - TOTAL_CLEARANCE - REAR_START
-RIGHT_LONG_WIDTH = 120.0           # Middle-right outside width
-BIN_WIDTH = DRAWER_WIDTH - TOTAL_CLEARANCE - BIN_GAP - RIGHT_LONG_WIDTH
-LONG_BAY_WIDTH = BIN_WIDTH - 2 * WALL
-LONG_BAY_LENGTH = 250.0              # Left middle clear length
-RIGHT_LONG_OUTER_LENGTH = 163.0    # Middle-right outside depth
-RIGHT_LONG_BAY_WIDTH = RIGHT_LONG_WIDTH - 2 * WALL
-RIGHT_LONG_BAY_LENGTH = RIGHT_LONG_OUTER_LENGTH - 2 * WALL
-# Rear clear lengths are reduced to leave space for walls and bin clearance.
-LONG_OUTER_LENGTH = LONG_BAY_LENGTH + 2 * WALL
-SHORT_OUTER_LENGTH = REAR_DEPTH - BIN_GAP - LONG_OUTER_LENGTH
-RIGHT_SHORT_OUTER_LENGTH = REAR_DEPTH - BIN_GAP - RIGHT_LONG_OUTER_LENGTH
-RIGHT_SHORT_START = REAR_START + RIGHT_LONG_OUTER_LENGTH + BIN_GAP
-SHORT_BAY_LENGTH = SHORT_OUTER_LENGTH - 2 * WALL
-RIGHT_SHORT_BAY_LENGTH = RIGHT_SHORT_OUTER_LENGTH - 2 * WALL
+BIN_GAP = 0.0                     # Separate bins touch at their outside walls
+CORNER_RADIUS = 0.0              # Square outside corners fill every junction
+INSIDE_CORNER_RADIUS = 2.6
+EXTRA_INNER_LENGTH = 300.0
+
+# Name, minimum internal length, minimum internal width.
+REQUESTED_BINS = (
+    ('Tablespoons 1', 210.0, 50.0),
+    ('Tablespoons 2', 210.0, 50.0),
+    ('Forks 1', 210.0, 30.0),
+    ('Forks 2', 210.0, 30.0),
+    ('Knives', 250.0, 70.0),
+    ('Teaspoons', 160.0, 40.0),
+    ('Dessert Forks', 180.0, 40.0),
+    ('Serving Spoons', 240.0, 70.0),
+    ('Butter Knives', 180.0, 50.0),
+    ('Chopsticks', 280.0, 60.0),
+    ('Serving Utensils', 280.0, 100.0),
+    ('Fancy Chopsticks', 270.0, 70.0),
+    ('Napkin Rings', 120.0, 120.0),
+)
+FRONT_BIN_NAMES = (
+    'Tablespoons 1', 'Tablespoons 2', 'Forks 1', 'Forks 2', 'Knives',
+    'Teaspoons', 'Dessert Forks', 'Butter Knives', 'Chopsticks', 'Fancy Chopsticks',
+)
+MINIMUM_SIZES = {name: (length, width) for name, length, width in REQUESTED_BINS}
+USABLE_WIDTH = DRAWER_WIDTH - TOTAL_CLEARANCE
+USABLE_DEPTH = DRAWER_DEPTH - TOTAL_CLEARANCE
+FRONT_INNER_LENGTH = max(MINIMUM_SIZES[name][0] for name in FRONT_BIN_NAMES)
+FRONT_OUTER_DEPTH = FRONT_INNER_LENGTH + 2 * WALL
+FRONT_WIDTH_EXTRA = (USABLE_WIDTH - sum(MINIMUM_SIZES[name][1] + 2 * WALL
+                                     for name in FRONT_BIN_NAMES)) / len(FRONT_BIN_NAMES)
+REAR_OUTER_DEPTH = USABLE_DEPTH - FRONT_OUTER_DEPTH
+REAR_LEFT_WIDTH = EXTRA_INNER_LENGTH + 2 * WALL
+REAR_RIGHT_WIDTH = USABLE_WIDTH - REAR_LEFT_WIDTH
+SERVING_UTENSILS_DEPTH = MINIMUM_SIZES['Serving Utensils'][1] + 2 * WALL
+NAPKIN_RINGS_DEPTH = MINIMUM_SIZES['Napkin Rings'][1] + 2 * WALL
+EXTRA_INNER_WIDTH = REAR_OUTER_DEPTH - SERVING_UTENSILS_DEPTH - 2 * WALL
+
+# Allocated INTERNAL sizes, after expanding minimums to fill each rectangular cell.
+BIN_SPECS = tuple((name, FRONT_INNER_LENGTH, MINIMUM_SIZES[name][1] + FRONT_WIDTH_EXTRA)
+                  for name in FRONT_BIN_NAMES) + (
+    ('Napkins', EXTRA_INNER_LENGTH, EXTRA_INNER_WIDTH),
+    ('Serving Utensils', REAR_LEFT_WIDTH - 2 * WALL, SERVING_UTENSILS_DEPTH - 2 * WALL),
+    ('Serving Spoons', REAR_RIGHT_WIDTH - 2 * WALL,
+     REAR_OUTER_DEPTH - NAPKIN_RINGS_DEPTH - 2 * WALL),
+    ('Napkin Rings', REAR_RIGHT_WIDTH - 2 * WALL, NAPKIN_RINGS_DEPTH - 2 * WALL),
+)
+
+
+def bin_placements():
+    """X/Y in the inset usable area, and whether to rotate a bin 90 degrees."""
+    placements = []
+    x = 0.0
+    for name in FRONT_BIN_NAMES:
+        placements.append((x, 0.0, True))
+        x += MINIMUM_SIZES[name][1] + FRONT_WIDTH_EXTRA + 2 * WALL
+    placements.extend((
+        (0.0, FRONT_OUTER_DEPTH, False),
+        (0.0, USABLE_DEPTH - SERVING_UTENSILS_DEPTH, False),
+        (REAR_LEFT_WIDTH, FRONT_OUTER_DEPTH, False),
+        (REAR_LEFT_WIDTH, USABLE_DEPTH - NAPKIN_RINGS_DEPTH, False),
+    ))
+    return tuple(placements)
 
 
 def layout():
-    """Five complete bins: name, inset-area X/Y, outside width and depth."""
-    width = DRAWER_WIDTH - 2 * EDGE_CLEARANCE
-    depth = DRAWER_DEPTH - 2 * EDGE_CLEARANCE
+    """Return separate bins as (name, inset X/Y, OUTSIDE width and depth)."""
+    width = DRAWER_WIDTH - TOTAL_CLEARANCE
+    depth = DRAWER_DEPTH - TOTAL_CLEARANCE
     assert 0 < FLOOR < HEIGHT <= DRAWER_HEIGHT
-    assert WALL > 0 and EDGE_CLEARANCE >= 0 and BIN_GAP > 0
-    assert LONG_BAY_WIDTH > TOOL_WIDTH and LONG_BAY_LENGTH > 0
-    assert SHORT_BAY_LENGTH > 0 and RIGHT_SHORT_BAY_LENGTH > 0
-    assert abs(FRONT_WIDTH - width) < 1e-8
-    assert FRONT_DEPTH > 2 * WALL
-    bins = [
-        ('Front', 0, 0, FRONT_WIDTH, FRONT_DEPTH),
-        ('Long_Left', 0, REAR_START, BIN_WIDTH, LONG_OUTER_LENGTH),
-        ('Short_Left', 0, REAR_START + LONG_OUTER_LENGTH + BIN_GAP,
-         BIN_WIDTH, SHORT_OUTER_LENGTH),
-        # Fill the rear area with a wider left column and a 120 mm right column.
-        ('Long_Right', width - RIGHT_LONG_WIDTH, REAR_START,
-         RIGHT_LONG_WIDTH, RIGHT_LONG_OUTER_LENGTH),
-        ('Short_Right', BIN_WIDTH + BIN_GAP, RIGHT_SHORT_START,
-         RIGHT_LONG_WIDTH, RIGHT_SHORT_OUTER_LENGTH),
-    ]
-    for name, x, y, bin_width, length in bins:
-        assert x >= 0 and y >= 0 and bin_width > 2 * WALL and length > 2 * WALL, name
-        assert x + bin_width <= width + 1e-8 and y + length <= depth + 1e-8, name
-    for i, first in enumerate(bins):
-        _, ax, ay, aw, ad = first
-        for second in bins[i + 1:]:
-            _, bx, by, bw, bd = second
-            assert (ax + aw <= bx or bx + bw <= ax or
-                    ay + ad <= by or by + bd <= ay), (first[0], second[0])
+    assert WALL > 0 and EDGE_CLEARANCE >= 0 and BIN_GAP == 0
+    assert CORNER_RADIUS == 0 and INSIDE_CORNER_RADIUS > 0
+    assert FRONT_WIDTH_EXTRA >= 0 and EXTRA_INNER_WIDTH > 0
+    placements = bin_placements()
+    assert len(REQUESTED_BINS) == 13 and len(BIN_SPECS) == len(placements) == 14
+    assert len({name for name, _, _ in BIN_SPECS}) == len(BIN_SPECS)
+    allocated = {name: (length, width) for name, length, width in BIN_SPECS}
+    for name, minimum_length, minimum_width in REQUESTED_BINS:
+        assert allocated[name][0] >= minimum_length - 1e-7, name
+        assert allocated[name][1] >= minimum_width - 1e-7, name
+    bins = []
+    tolerance = 1e-7
+    for (name, inner_length, inner_width), (x, y, rotated) in zip(BIN_SPECS, placements):
+        assert min(inner_length, inner_width) > 2 * INSIDE_CORNER_RADIUS, name
+        inner_x, inner_y = ((inner_width, inner_length) if rotated
+                            else (inner_length, inner_width))
+        outer_width = inner_x + 2 * WALL
+        outer_depth = inner_y + 2 * WALL
+        assert x >= 0 and y >= 0, name
+        assert x + outer_width <= width + tolerance, name
+        assert y + outer_depth <= depth + tolerance, name
+        bins.append((name, x, y, outer_width, outer_depth))
+    for i, (name, ax, ay, aw, ad) in enumerate(bins):
+        for other, bx, by, bw, bd in bins[i + 1:]:
+            assert (ax + aw + BIN_GAP <= bx + tolerance or
+                    bx + bw + BIN_GAP <= ax + tolerance or
+                    ay + ad + BIN_GAP <= by + tolerance or
+                    by + bd + BIN_GAP <= ay + tolerance), (name, other)
+    # Rectangles are inside the envelope and disjoint; equal total area proves
+    # that their square outside footprints fill it completely.
+    assert abs(sum(w * d for _, _, _, w, d in bins) - width * depth) < 0.001
     return width, depth, bins
 
 
@@ -105,6 +154,8 @@ def extrude_rectangle(component, plane, rectangle, height, name, join=False):
 
 def round_outer_corners(component, body, bin_width, length):
     """Fillet the four outside vertical edges."""
+    if CORNER_RADIUS == 0:
+        return
     corners = ((0.0, 0.0), (bin_width, 0.0),
                (0.0, length), (bin_width, length))
     edges = adsk.core.ObjectCollection.create()
@@ -179,7 +230,7 @@ def brown_appearance(app, design):
 def run(context):
     app = adsk.core.Application.get()
     ui = app.userInterface
-    logger = logging.getLogger('Drawer1')
+    logger = logging.getLogger('drawer_553x526')
     logger.setLevel(logging.INFO)
     logger.propagate = False
     handler = None
@@ -189,14 +240,14 @@ def run(context):
         handler = logging.FileHandler(str(log_path), mode='a', encoding='utf-8')
         handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
         logger.addHandler(handler)
-        logger.info('=== Drawer1 run started; Fusion %s ===', app.version)
+        logger.info('=== drawer_553x526 run started; Fusion %s ===', app.version)
         logger.info('Script: %s', Path(__file__).resolve())
         logger.info('Inputs (mm): %s', {key: value for key, value in globals().items()
                                       if key.isupper()})
         width, depth, bins = layout()
         logger.info('Layout validated: width=%s depth=%s bins=%s', width, depth, bins)
         document = app.documents.add(adsk.core.DocumentTypes.FusionDesignDocumentType)
-        document.name = 'Drawer1 - Brown'
+        document.name = 'drawer_553x526 - Front row preview'
         design = adsk.fusion.Design.cast(app.activeProduct)
         design.designType = adsk.fusion.DesignTypes.ParametricDesignType
         # defaultLengthUnits is read-only; use the design's writable enum setting.
@@ -225,8 +276,12 @@ def run(context):
                 (x + EDGE_CLEARANCE) / 10.0, (y + EDGE_CLEARANCE) / 10.0, 0)
             occurrence = root.occurrences.addNewComponent(transform)
             component = occurrence.component
-            component.name = 'Drawer1_' + name
-            component.attributes.add('Drawer1', 'Color', 'Brown')
+            component.name = name
+            component.attributes.add('drawer_553x526', 'Color', 'Brown')
+            component.attributes.add('drawer_553x526', 'Contents', name)
+            component.attributes.add('drawer_553x526', 'Internal size mm',
+                                     '%.3f x %.3f x %.3f' %
+                                     (bin_width - 2 * WALL, length - 2 * WALL, HEIGHT - FLOOR))
             extrude_rectangle(component, component.xYConstructionPlane,
                               (0, 0, bin_width, length), FLOOR, 'Floor')
             plane_input = component.constructionPlanes.createInput()
@@ -259,30 +314,34 @@ def run(context):
                    zip(actual_dimensions, (bin_width, length, HEIGHT))):
                 raise RuntimeError('%s dimensions differ: expected %s, got %s' %
                                    (name, (bin_width, length, HEIGHT), actual_dimensions))
-            logger.info('%s solid validated: volume_cm3=%s bounds_mm=%s', name,
-                        body.volume, actual_dimensions)
+            inner_x, inner_y = bin_width - 2 * WALL, length - 2 * WALL
+            outer_area = bin_width * length - (4 - math.pi) * CORNER_RADIUS ** 2
+            inner_area = inner_x * inner_y - (4 - math.pi) * INSIDE_CORNER_RADIUS ** 2
+            expected_volume = (outer_area * HEIGHT - inner_area * (HEIGHT - FLOOR)) / 1000
+            if abs(body.volume - expected_volume) > 0.001:
+                raise RuntimeError('Solid volume differs from the specified wall/floor geometry: ' + name)
+            logger.info('%s solid validated: volume_cm3=%s outside_mm=%s inside_mm=%s',
+                        name, body.volume, actual_dimensions, (inner_x, inner_y, HEIGHT - FLOOR))
             body.name = component.name + '_Brown'
             if appearance:
                 body.appearance = appearance
                 logger.info('%s appearance applied: %s', name, body.appearance.name)
         app.activeViewport.fit()
         message = (
-            'Five complete brown bins created.\n\n'
-            'Drawer W x D x H: 322 x 526 x 80 mm.\n'
-            'Front bin outside W x D x H: %.1f x %.1f x %.1f mm.\n'
-            'Horizontal clearance: %.1f mm per side; no extra height clearance.\n'
-            'Middle-right outside W x D: %.1f x %.1f mm.\n'
-            'Clear lengths (mm): left long %.2f, left short %.2f;\n'
-            'right middle %.2f, right rear %.2f.\n'
-            'Clear widths: right bins %.1f; left bins %.1f mm.\n\n'
-            'Save the design in Fusion. Export the desired bins using Save As Mesh.\n'
-            'Import at 100%% scale in Bambu Studio.\n'
-            'Make any needed cuts in Bambu Studio before printing.\n'
-            'Choose the needed cuts and print settings in Bambu Studio.'
-        ) % (FRONT_WIDTH, FRONT_DEPTH, HEIGHT, EDGE_CLEARANCE,
-             RIGHT_LONG_WIDTH, RIGHT_LONG_OUTER_LENGTH,
-             LONG_BAY_LENGTH, SHORT_BAY_LENGTH, RIGHT_LONG_BAY_LENGTH,
-             RIGHT_SHORT_BAY_LENGTH, RIGHT_LONG_BAY_WIDTH, LONG_BAY_WIDTH)
+            '%d separate brown bins created for the %.0f x %.0f x %.0f mm drawer.\n\n'
+            'Requested INTERNAL sizes are minimums; bins are enlarged to fill the drawer.\n'
+            'Ten dining-utensil bins run left-to-right across the front.\n'
+            'Four storage bins fill the rear; square outside walls butt together.\n'
+            'Napkins bin inside: %.1f x %.1f mm.\n'
+            'Outside height %.1f mm; clear height %.1f mm.\n'
+            'Walls %.1f mm; floor %.1f mm; gaps %.1f mm.\n'
+            'Drawer clearance: %.1f mm per horizontal side.\n\n'
+            'Save the design in Fusion. Select each named component for Save As Mesh.\n'
+            'Import at 100%% scale in Bambu Studio and check plate/brim fit.\n'
+            'Inside corners have a %.1f mm radius.'
+        ) % (len(bins), DRAWER_WIDTH, DRAWER_DEPTH, DRAWER_HEIGHT,
+             EXTRA_INNER_LENGTH, EXTRA_INNER_WIDTH, HEIGHT, HEIGHT - FLOOR,
+             WALL, FLOOR, BIN_GAP, EDGE_CLEARANCE, INSIDE_CORNER_RADIUS)
         if warnings:
             message += '\n\n' + '\n'.join(warnings)
         message += '\n\nRun log: ' + str(log_path)
@@ -290,8 +349,8 @@ def run(context):
         ui.messageBox(message)
     except Exception:
         if handler:
-            logger.exception('Drawer1 run failed')
-        ui.messageBox('Drawer1 failed. Any partial model is left open for inspection.\n\n'
+            logger.exception('drawer_553x526 run failed')
+        ui.messageBox('drawer_553x526 failed. Any partial model is left open for inspection.\n\n'
                       + traceback.format_exc())
     finally:
         if handler:
